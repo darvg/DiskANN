@@ -568,6 +568,7 @@ namespace diskann {
 
   inline void open_file_to_write(std::ofstream&     writer,
                                  const std::string& filename) {
+		// NOTE : this function appears twice? Once within the diskann namespace, and once outside
     writer.exceptions(std::ofstream::failbit | std::ofstream::badbit);
     if (!file_exists(filename))
       writer.open(filename, std::ios::binary | std::ios::out);
@@ -588,6 +589,19 @@ namespace diskann {
                                       filename + " for write because: " + buff,
                                   -1);
     }
+  }
+
+  inline void copy_file(std::string in_file, std::string out_file) {
+    std::ifstream source(in_file, std::ios::binary);
+    std::ofstream dest(out_file, std::ios::binary);
+
+    std::istreambuf_iterator<char> begin_source(source);
+    std::istreambuf_iterator<char> end_source;
+    std::ostreambuf_iterator<char> begin_dest(dest);
+    std::copy(begin_source, end_source, begin_dest);
+
+    source.close();
+    dest.close();
   }
 
   template<typename T>
