@@ -8,6 +8,51 @@ size_t random(size_t range_from, size_t range_to) {
   return distr(generator);
 }
 
+
+
+  tsl::robin_set<std::string> parse_label_file(const std::string &map_file) {
+    // TODO: Add description of function
+    std::ifstream infile(map_file);
+    std::string   line, token;
+    unsigned      line_cnt = 0;
+
+    while (std::getline(infile, line)) {
+      line_cnt++;
+    }
+    std::vector<std::vector<std::string>> pts_to_labels;
+    tsl::robin_set<std::string> labels;
+    pts_to_labels.resize(line_cnt, std::vector<std::string>());
+
+    infile.clear();
+    infile.seekg(0, std::ios::beg);
+    while (std::getline(infile, line)) {
+      std::istringstream       iss(line);
+      std::vector<std::string> lbls(0);
+      // long int              val;
+      getline(iss, token, '\t');
+      _u32 i = (_u32) std::stoul(token);
+      getline(iss, token, '\t');
+      std::istringstream new_iss(token);
+      while (getline(new_iss, token, ',')) {
+        token.erase(std::remove(token.begin(), token.end(), '\n'), token.end());
+        token.erase(std::remove(token.begin(), token.end(), '\r'), token.end());
+        lbls.push_back(token);
+        labels.insert(token);
+      }
+      if (lbls.size() <= 0) {
+        std::cout << "No label found";
+        exit(-1);
+      }
+      std::sort(lbls.begin(), lbls.end());
+      pts_to_labels[i] = lbls;
+      line_cnt++;
+    }
+    std::cout << "Identified " << labels.size() << " distinct label(s)"
+              << std::endl;
+    return labels;
+  }
+
+
 int main (int argc, char *argv[]) {
 
 	// 1. setup command line arguments
@@ -68,7 +113,10 @@ int main (int argc, char *argv[]) {
     return -1;
   }
 
-	// TODO: 2. parse label file
+
+	// 2. parse label file
+  tsl::robin_set<std::string> labels = parse_label_file(label_file);
+  
 	// TODO: 3. for every label, collect points into map
 		// TODO: 3a. for every label, build unfiltered index
 	// TODO: 4. load the indices into memory and combine
