@@ -1,5 +1,10 @@
 #include <random>
+#include <boost/program_options.hpp>
+#include <omp.h>
 #include "index.h"
+
+
+namespace po = boost::program_options;
 
 size_t random(size_t range_from, size_t range_to) {
   std::random_device                    rand_dev;
@@ -10,7 +15,7 @@ size_t random(size_t range_from, size_t range_to) {
 
 
 
-  tsl::robin_set<std::string> parse_label_file(const std::string &map_file) {
+  std::map<std::string,tsl::robin_set<uint32_t>> parse_label_file(const std::string &map_file) {
     // TODO: Add description of function
     std::ifstream infile(map_file);
     std::string   line, token;
@@ -19,9 +24,11 @@ size_t random(size_t range_from, size_t range_to) {
     while (std::getline(infile, line)) {
       line_cnt++;
     }
-    std::vector<std::vector<std::string>> pts_to_labels;
+    std::vector<std::vector<std::string>> points_to_labels;
     tsl::robin_set<std::string> labels;
-    pts_to_labels.resize(line_cnt, std::vector<std::string>());
+    points_to_labels.resize(line_cnt, std::vector<std::string>());
+    std::map<std::string,tsl::robin_set<uint32_t>> labels_to_points;
+  
 
     infile.clear();
     infile.seekg(0, std::ios::beg);
@@ -38,18 +45,19 @@ size_t random(size_t range_from, size_t range_to) {
         token.erase(std::remove(token.begin(), token.end(), '\r'), token.end());
         lbls.push_back(token);
         labels.insert(token);
+        labels_to_points[token].insert(i);
       }
       if (lbls.size() <= 0) {
         std::cout << "No label found";
         exit(-1);
       }
       std::sort(lbls.begin(), lbls.end());
-      pts_to_labels[i] = lbls;
+      points_to_labels[i] = lbls;
       line_cnt++;
     }
     std::cout << "Identified " << labels.size() << " distinct label(s)"
               << std::endl;
-    return labels;
+    return labels_to_points;
   }
 
 
@@ -115,9 +123,11 @@ int main (int argc, char *argv[]) {
 
 
 	// 2. parse label file
-  tsl::robin_set<std::string> labels = parse_label_file(label_file);
+  std::map<std::string,tsl::robin_set<uint32_t>> labels_to_points = parse_label_file(label_file);
+
   
 	// TODO: 3. for every label, collect points into map
+
 		// TODO: 3a. for every label, build unfiltered index
 	// TODO: 4. load the indices into memory and combine
 	// TODO: 5. adjust filesize
