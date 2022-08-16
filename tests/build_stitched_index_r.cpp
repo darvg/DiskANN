@@ -14,51 +14,81 @@ size_t random(size_t range_from, size_t range_to) {
 }
 
 
+std::map<std::string,tsl::robin_set<uint32_t>> parse_label_file(const std::string &map_file) {
+	// TODO: Add description of function
+	std::ifstream infile(map_file);
+	std::string   line, token;
+	unsigned      line_cnt = 0;
 
-  std::map<std::string,tsl::robin_set<uint32_t>> parse_label_file(const std::string &map_file) {
-    // TODO: Add description of function
-    std::ifstream infile(map_file);
-    std::string   line, token;
-    unsigned      line_cnt = 0;
+	while (std::getline(infile, line)) {
+		line_cnt++;
+	}
+	std::vector<std::vector<std::string>> points_to_labels;
+	tsl::robin_set<std::string> labels;
+	points_to_labels.resize(line_cnt, std::vector<std::string>());
+	std::map<std::string,tsl::robin_set<uint32_t>> labels_to_points;
 
-    while (std::getline(infile, line)) {
-      line_cnt++;
-    }
-    std::vector<std::vector<std::string>> points_to_labels;
-    tsl::robin_set<std::string> labels;
-    points_to_labels.resize(line_cnt, std::vector<std::string>());
-    std::map<std::string,tsl::robin_set<uint32_t>> labels_to_points;
-  
 
-    infile.clear();
-    infile.seekg(0, std::ios::beg);
-    while (std::getline(infile, line)) {
-      std::istringstream       iss(line);
-      std::vector<std::string> lbls(0);
-      // long int              val;
-      getline(iss, token, '\t');
-      _u32 i = (_u32) std::stoul(token);
-      getline(iss, token, '\t');
-      std::istringstream new_iss(token);
-      while (getline(new_iss, token, ',')) {
-        token.erase(std::remove(token.begin(), token.end(), '\n'), token.end());
-        token.erase(std::remove(token.begin(), token.end(), '\r'), token.end());
-        lbls.push_back(token);
-        labels.insert(token);
-        labels_to_points[token].insert(i);
-      }
-      if (lbls.size() <= 0) {
-        std::cout << "No label found";
-        exit(-1);
-      }
-      std::sort(lbls.begin(), lbls.end());
-      points_to_labels[i] = lbls;
-      line_cnt++;
-    }
-    std::cout << "Identified " << labels.size() << " distinct label(s)"
-              << std::endl;
-    return labels_to_points;
-  }
+	infile.clear();
+	infile.seekg(0, std::ios::beg);
+	while (std::getline(infile, line)) {
+		std::istringstream       iss(line);
+		std::vector<std::string> lbls(0);
+		// long int              val;
+		getline(iss, token, '\t');
+		_u32 i = (_u32) std::stoul(token);
+		getline(iss, token, '\t');
+		std::istringstream new_iss(token);
+		while (getline(new_iss, token, ',')) {
+			token.erase(std::remove(token.begin(), token.end(), '\n'), token.end());
+			token.erase(std::remove(token.begin(), token.end(), '\r'), token.end());
+			lbls.push_back(token);
+			labels.insert(token);
+			labels_to_points[token].insert(i);
+		}
+		if (lbls.size() <= 0) {
+			std::cout << "No label found";
+			exit(-1);
+		}
+		std::sort(lbls.begin(), lbls.end());
+		points_to_labels[i] = lbls;
+		line_cnt++;
+	}
+	std::cout << "Identified " << labels.size() << " distinct label(s)"
+						<< std::endl;
+	return labels_to_points;
+}
+
+
+template <typename t>
+tsl::robin_map<std::string, tsl::robin_map<_u64, _u64>> convert_base_ids_to_label_vecs(
+		const std::string data_type, const std::string &base_file,
+		const std::string &labels_file, const bool use_universal_label,
+		const std::string universal_label, std::vector<tsl::robin_set<std::string>> point_ids_labels_map) {
+	// TODO: Add description of function
+
+  tsl::robin_map<std::string, tsl::robin_map<_u64, _u64>> rev_map;
+	std::cout << "Loading base file " << base_file << "..." << std::endl;
+
+	std::ifstream base_file_stream, labels_file_stream;
+	base_file_stream.exceptions(std::ios::badbit | std::ios::failbit);
+  base_file_stream.open(base_file, std::ios::binary);
+	labels_file_stream.exceptions(std::ios::badbit | std::ios::failbit);
+  labels_file_stream.open(labels_file, std::ios::binary);
+
+	unsigned number_of_points, dimensions;
+	base_file_stream.read((char *) &number_of_points, sizeof(number_of_points));
+	base_file_stream.read((char *) &dimensions, sizeof(dimensions));
+
+	unsigned current_point_id = 0;
+	while (true) {
+		tsl::robin_set<std::string> current_point_labels = point_ids_labels_map[current_point_id];
+		
+	}	
+
+
+	
+}
 
 
 int main (int argc, char *argv[]) {
@@ -127,7 +157,15 @@ int main (int argc, char *argv[]) {
 
   
 	// TODO: 3. for every label, collect points into map
-
+	tsl::robin_map<std::string, tsl::robin_map<_u64, _u64>> rev_map;
+	if (data_type == "uint8")
+		rev_map;
+	else if (data_type == "int8")
+		rev_map;
+	else if (data_type == "float")
+		rev_map;
+	else
+		std::cout << "Unsupported type. Use float/int8/uint8" << std::endl;
 		// TODO: 3a. for every label, build unfiltered index
 	// TODO: 4. load the indices into memory and combine
 	// TODO: 5. adjust filesize
