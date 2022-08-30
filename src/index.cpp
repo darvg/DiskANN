@@ -640,6 +640,14 @@ namespace diskann {
     std::string labels_file = mem_index_file + "_labels.txt";
     std::string labels_to_medoids = mem_index_file + "_labels_to_medoids.txt";
     if (file_exists(labels_file)) {
+      std::string universal_label_file(filename);
+      universal_label_file += "_universal_label.txt";
+      if (file_exists(universal_label_file)) {
+        std::ifstream universal_label_reader(universal_label_file);
+        universal_label_reader >> _universal_label;
+        _use_universal_label = true;
+        universal_label_reader.close();
+      }
       parse_label_file(labels_file);
       if (file_exists(labels_to_medoids)) {
         std::ifstream medoid_stream(labels_to_medoids);
@@ -670,14 +678,7 @@ namespace diskann {
         }
       }
 
-      std::string universal_label_file(filename);
-      universal_label_file += "_universal_label.txt";
-      if (file_exists(universal_label_file)) {
-        std::ifstream universal_label_reader(universal_label_file);
-        universal_label_reader >> _universal_label;
-        _use_universal_label = true;
-        universal_label_reader.close();
-      }
+      
     }
 
 
@@ -846,13 +847,13 @@ namespace diskann {
       }
     }
 #else
-
     size_t   bytes_read = vamana_metadata_size;
     size_t   cc = 0;
     unsigned nodes_read = 0;
     while (bytes_read != expected_file_size) {
       unsigned k;
       in.read((char *) &k, sizeof(unsigned));
+
       if (k == 0) {
         diskann::cerr << "ERROR: Point found with no out-neighbors, point#"
                       << nodes_read << std::endl;
@@ -1739,6 +1740,9 @@ namespace diskann {
   template<typename T, typename TagT>
   void Index<T, TagT>::prune_all_nbrs(const Parameters &parameters) {
     const unsigned range = parameters.Get<unsigned>("R");
+    const unsigned maxc = parameters.Get<unsigned>("C");
+    const float alpha = parameters.Get<unsigned>("alpha");
+    _filtered_index = true;
 
     diskann::Timer timer;
 #pragma omp parallel for
@@ -1760,8 +1764,8 @@ namespace diskann {
               dummy_visited.insert(cur_nbr);
             }
           }
-          prune_neighbors((_u32) node, dummy_pool, new_out_neighbors);
-
+          
+          prune_neighbors((_u32) node, dummy_pool, range, maxc, alpha, new_out_neighbors);
           _final_graph[node].clear();
           for (auto id : new_out_neighbors)
             _final_graph[node].emplace_back(id);
@@ -1773,7 +1777,7 @@ namespace diskann {
                   << std::endl;
     size_t max = 0, min = 1 << 30, total = 0, cnt = 0;
     for (size_t i = 0; i < (_nd + _num_frozen_pts); i++) {
-      auto &pool = _final_graph[i];
+      std::vector<unsigned> pool = _final_graph[i];
       max = (std::max)(max, pool.size());
       min = (std::min)(min, pool.size());
       total += pool.size();
@@ -2016,7 +2020,7 @@ namespace diskann {
       line_cnt++;
     }
     _pts_to_labels.resize(line_cnt, std::vector<std::string>());
-
+    std::vector<_u32> points_with_universal_label; 
     infile.clear();
     infile.seekg(0, std::ios::beg);
     while (std::getline(infile, line)) {
@@ -2027,13 +2031,19 @@ namespace diskann {
       _u32 i = (_u32) std::stoul(token);
       getline(iss, token, '\t');
       std::istringstream new_iss(token);
+      bool current_universal_label_check = false;
       while (getline(new_iss, token, ',')) {
         token.erase(std::remove(token.begin(), token.end(), '\n'), token.end());
         token.erase(std::remove(token.begin(), token.end(), '\r'), token.end());
-        lbls.push_back(token);
-        _labels.insert(token);
+        if (token == _universal_label) {
+          points_with_universal_label.push_back(i);
+          current_universal_label_check = true;
+        } else {
+          _labels.insert(token);
+          lbls.push_back(token);
+        }
       }
-      if (lbls.size() <= 0) {
+      if (lbls.size() <= 0 && !current_universal_label_check) {
         std::cout << "No label found";
         exit(-1);
       }
@@ -2041,6 +2051,11 @@ namespace diskann {
       _pts_to_labels[i] = lbls;
       line_cnt++;
     }
+
+    std::vector<std::string> output(_labels.begin(), _labels.end()); 
+    for (const auto &point_id : points_with_universal_label)
+      _pts_to_labels[point_id] = output;
+
     std::cout << "Identified " << _labels.size() << " distinct label(s)"
               << std::endl;
   }
