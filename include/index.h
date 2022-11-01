@@ -30,6 +30,8 @@
 #define EXPAND_IF_FULL 0
 
 namespace diskann {
+	typedef unsigned label;
+	const unsigned LABEL_MAX = 65537;
   inline double estimate_ram_usage(_u64 size, _u32 dim, _u32 datasize,
                                    _u32 degree) {
     double size_of_data = ((double) size) * ROUND_UP(dim, 8) * datasize;
@@ -171,7 +173,7 @@ namespace diskann {
          const size_t num_points_to_load, Parameters &parameters,
          const std::vector<TagT> &tags = std::vector<TagT>());
 
-    DISKANN_DLLEXPORT void set_universal_label(const std::string &label);
+    DISKANN_DLLEXPORT void set_universal_label(const label &label);
 
 
     // For Bulk Index FastL2 search, we interleave the data with graph
@@ -197,7 +199,7 @@ namespace diskann {
 
     template<typename IndexType>
     DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> search_with_filters(
-        const T *query, const std::string &filter_label, const size_t K,
+        const T *query, const label &filter_label, const size_t K,
         const unsigned L, IndexType *indices, float *distances);
 
     DISKANN_DLLEXPORT void clear_index();
@@ -255,6 +257,8 @@ namespace diskann {
     // change.
     DISKANN_DLLEXPORT static const int METADATA_ROWS = 5;
 
+		int num_intersects = 0;
+
     // ********************************
     //
     // Internals of the library
@@ -289,7 +293,7 @@ namespace diskann {
                                               float                *distances,
                                               InMemQueryScratch<T> &scratch,
                                               bool use_filters = false,
-                                              const std::string &filter_label = std::string());
+                                              const label &filter_label = LABEL_MAX);
 
     std::pair<uint32_t, uint32_t> iterate_to_fixed_point(
         const T *node_coords, const unsigned Lindex,
@@ -297,7 +301,7 @@ namespace diskann {
         std::vector<Neighbor>       &expanded_nodes_info,
         tsl::robin_set<unsigned>    &expanded_nodes_ids,
         std::vector<Neighbor> &best_L_nodes, bool use_filter,
-        const std::vector<std::string> &filters,
+        const std::vector<label> &filters,
         std::vector<unsigned> &des,
         tsl::robin_set<unsigned> &inserted_into_pool_rs,
         boost::dynamic_bitset<> &inserted_into_pool_bs, bool ret_frozen = true,
@@ -307,7 +311,7 @@ namespace diskann {
                             std::vector<unsigned>     init_ids,
                             std::vector<Neighbor>    &expanded_nodes_info,
         tsl::robin_set<unsigned> &expanded_nodes_ids, bool use_filter,
-        const std::vector<std::string> &filters, std::vector<unsigned>    &des,
+        const std::vector<label> &filters, std::vector<unsigned>    &des,
                             std::vector<Neighbor>    &best_L_nodes,
                             tsl::robin_set<unsigned> &inserted_into_pool_rs,
                             boost::dynamic_bitset<> & inserted_into_pool_bs);
@@ -328,7 +332,7 @@ namespace diskann {
                             std::vector<unsigned>     init_ids,
                             std::vector<Neighbor>    &expanded_nodes_info,
         tsl::robin_set<unsigned> &expanded_nodes_ids, bool use_filter = false,
-        const std::vector<std::string> &filters = std::vector<std::string>());
+        const std::vector<label> &filters = std::vector<label>());
 
     void prune_neighbors(const unsigned location, std::vector<Neighbor> &pool,
                          std::vector<unsigned> &pruned_list);
@@ -435,13 +439,13 @@ namespace diskann {
     // Filter Support
 
     bool                                  _filtered_index = false;
-    std::vector<std::vector<std::string>> _pts_to_labels;
-    tsl::robin_set<std::string>           _labels;
+    std::vector<std::vector<label>> _pts_to_labels;
+    tsl::robin_set<label>           _labels;
     std::string                           _labels_file;
-    std::unordered_map<std::string, _u32> _filter_to_medoid_id;
+    std::unordered_map<label, _u32> _filter_to_medoid_id;
     std::unordered_map<_u32, _u32>        _medoid_counts;
     bool        _use_universal_label = false;
-    std::string _universal_label = "";
+    label _universal_label = LABEL_MAX;
 
 
     // Indexing parameters

@@ -762,7 +762,7 @@ namespace diskann {
         _pvamanaIndex->build(base_file.c_str(), base_num, paras);
       else {
         if (universal_label != "") {  //  indicates no universal label
-          _pvamanaIndex->set_universal_label(universal_label);
+          _pvamanaIndex->set_universal_label((_u32) std::stoul(universal_label));
         }
         _pvamanaIndex->build_filtered_index(base_file.c_str(), label_file, base_num, paras);
       }
@@ -833,7 +833,7 @@ namespace diskann {
         diskann::extract_shard_labels(label_file, shard_ids_file,
                                       shard_labels_file);
         if (universal_label != "") {  //  indicates no universal label
-          _pvamanaIndex->set_universal_label(universal_label);
+          _pvamanaIndex->set_universal_label((_u32) std::stoul(universal_label));
         }
         _pvamanaIndex->build_filtered_index(shard_base_file.c_str(), shard_labels_file, shard_base_pts, paras);
       }
