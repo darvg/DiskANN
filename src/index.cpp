@@ -39,7 +39,6 @@ namespace diskann {
     _indexingRange = indexParams.Get<uint32_t>("R");
     _indexingMaxC = indexParams.Get<uint32_t>("C");
     _indexingAlpha = indexParams.Get<float>("alpha");
-    _filterIndexingQueueSize = indexParams.Get<uint32_t>("Lf");
 
     uint32_t num_threads_srch = searchParams.Get<uint32_t>("num_threads");
     uint32_t num_threads_indx = indexParams.Get<uint32_t>("num_threads");
@@ -1272,10 +1271,12 @@ namespace diskann {
       omp_set_num_threads(num_threads);
 
     _indexingQueueSize = parameters.Get<unsigned>("L");  // Search list size
-    _filterIndexingQueueSize = parameters.Get<unsigned>("Lf");
     _indexingRange = parameters.Get<unsigned>("R");
     _indexingMaxC = parameters.Get<unsigned>("C");
     _indexingAlpha = parameters.Get<float>("alpha");
+		unsigned _filterIndexingQueueSize = 0;
+		if (_filtered_index)
+			_filterIndexingQueueSize = parameters.Get<unsigned>("Lf");
 
     /* visit_order is a vector that is initialized to the entire graph */
     std::vector<unsigned>          visit_order;
