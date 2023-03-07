@@ -69,7 +69,7 @@ size_t handle_args(int argc, char **argv, std::string &data_type,
                    path &input_data_path, path &final_index_path_prefix,
                    path &label_data_path, label &universal_label,
                    unsigned &num_threads, unsigned &R, unsigned &L,
-                   unsigned &stitched_R, float &alpha) {
+                   unsigned &stitched_R, float &alpha, std::string& label_type) {
   po::options_description desc{"Arguments"};
   try {
     desc.add_options()("help,h", "Print information on arguments");
@@ -109,6 +109,10 @@ size_t handle_args(int argc, char **argv, std::string &data_type,
         "If a point comes with the specified universal label (and only the "
         "univ. "
         "label), then the point is considered to have every possible label");
+    desc.add_options()(
+        "label_type",
+        po::value<std::string>(&label_type)->default_value("ushort"),
+        "label type <uint/ushort/string>");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -731,7 +735,7 @@ void clean_up_artifacts(path input_data_path, path final_index_path_prefix,
 
 int main(int argc, char **argv) {
   // 1. handle cmdline inputs
-  std::string data_type;
+  std::string data_type, label_type;
   path        input_data_path, final_index_path_prefix, label_data_path;
   label       universal_label;
   std::string universal_label_str;
@@ -741,13 +745,15 @@ int main(int argc, char **argv) {
   auto index_timer = std::chrono::high_resolution_clock::now();
   handle_args(argc, argv, data_type, input_data_path, final_index_path_prefix,
               label_data_path, universal_label, num_threads, R, L, stitched_R,
-              alpha);
+              alpha, label_type);
 
-  path labels_file_to_use = final_index_path_prefix + "_label_formatted.txt";
-  path labels_map_file = final_index_path_prefix + "_labels_map.txt";
-
-  convert_labels_string_to_int(label_data_path, labels_file_to_use,
+  path labels_file_to_use = label_data_path;
+  if (label_type == std::string("string")) {
+    labels_file_to_use = final_index_path_prefix + "_label_formatted.txt";
+    path labels_map_file = final_index_path_prefix + "_labels_map.txt";
+    convert_labels_string_to_int(label_data_path, labels_file_to_use,
                                labels_map_file, universal_label_str);
+  }
 
   // 2. parse label file and create necessary data structures
   std::vector<label_set>      point_ids_to_labels;
