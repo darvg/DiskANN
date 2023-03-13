@@ -8,12 +8,23 @@
 #include <vector>
 #include <atomic>
 
-#ifndef _WINDOWS
+#ifdef __linux__
 #include <fcntl.h>
 #include <libaio.h>
 #include <unistd.h>
 typedef io_context_t IOContext;
-#else
+#elif __APPLE__
+#include <dispatch/dispatch.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+struct IOContext {
+  int              fd;
+  dispatch_io_t    channel;
+  dispatch_queue_t queue;
+  dispatch_group_t grp;
+};
+#elif _WINDOWS
 #include <Windows.h>
 #include <minwinbase.h>
 
@@ -55,7 +66,12 @@ struct IOContext {
 
 #endif
 
+#ifdef __APPLE__
+#include <stdlib.h>
+#else
 #include <malloc.h>
+#endif
+
 #include <cstdio>
 #include <mutex>
 #include <thread>

@@ -12,7 +12,6 @@
 #include "disk_utils.h"
 #include "cached_io.h"
 #include "index.h"
-#include "mkl.h"
 #include "omp.h"
 #include "percentile_stats.h"
 #include "partition.h"
@@ -20,12 +19,18 @@
 #include "timer.h"
 #include "tsl/robin_set.h"
 
+#ifdef __APPLE__
+#include <Accelerate/Accelerate.h>
+#else
+#include "mkl.h"
+#endif
+
 namespace diskann {
 
   void add_new_file_to_single_index(std::string index_file,
                                     std::string new_file) {
     std::unique_ptr<_u64[]> metadata;
-    _u64                    nr, nc;
+    size_t                  nr, nc;
     diskann::load_bin<_u64>(index_file, metadata, nr, nc);
     if (nc != 1) {
       std::stringstream stream;
@@ -189,11 +194,12 @@ namespace diskann {
   template<typename T>
   T *load_warmup(const std::string &cache_warmup_file, uint64_t &warmup_num,
                  uint64_t warmup_dim, uint64_t warmup_aligned_dim) {
-    T       *warmup = nullptr;
-    uint64_t file_dim, file_aligned_dim;
+    T     *warmup = nullptr;
+    size_t file_dim, file_aligned_dim;
+    size_t warmup_num2 = (size_t) warmup_num;
 
     if (file_exists(cache_warmup_file)) {
-      diskann::load_aligned_bin<T>(cache_warmup_file, warmup, warmup_num,
+      diskann::load_aligned_bin<T>(cache_warmup_file, warmup, warmup_num2,
                                    file_dim, file_aligned_dim);
       if (file_dim != warmup_dim || file_aligned_dim != warmup_aligned_dim) {
         std::stringstream stream;
@@ -367,7 +373,7 @@ namespace diskann {
         // Gopal. random_shuffle() is deprecated.
         std::shuffle(final_nhood.begin(), final_nhood.end(), urng);
         nnbrs =
-            (unsigned) (std::min)(final_nhood.size(), (uint64_t) max_degree);
+            (std::min<unsigned>) (final_nhood.size(), (uint64_t) max_degree);
         // write into merged ofstream
         merged_vamana_writer.write((char *) &nnbrs, sizeof(unsigned));
         merged_vamana_writer.write((char *) final_nhood.data(),
@@ -399,7 +405,7 @@ namespace diskann {
 
     // Gopal. random_shuffle() is deprecated.
     std::shuffle(final_nhood.begin(), final_nhood.end(), urng);
-    nnbrs = (unsigned) (std::min)(final_nhood.size(), (uint64_t) max_degree);
+    nnbrs = (std::min<unsigned>) (final_nhood.size(), (uint64_t) max_degree);
     // write into merged ofstream
     merged_vamana_writer.write((char *) &nnbrs, sizeof(unsigned));
     merged_vamana_writer.write((char *) final_nhood.data(),
@@ -458,7 +464,7 @@ namespace diskann {
     std::string merged_index_prefix = mem_index_path + "_tempFiles";
 
     Timer timer;
-    int         num_parts =
+    int   num_parts =
         partition_with_ram_budget<T>(base_file, sampling_rate, ram_budget,
                                      2 * R / 3, merged_index_prefix, 2);
     diskann::cout << timer.elapsed_seconds_for_step("partitioning data")
@@ -490,7 +496,7 @@ namespace diskann {
       paras.Set<bool>("saturate_graph", 0);
       paras.Set<std::string>("save_path", shard_index_file);
 
-      _u64 shard_base_dim, shard_base_pts;
+      size_t shard_base_dim, shard_base_pts;
       get_bin_metadata(shard_base_file, shard_base_pts, shard_base_dim);
       std::unique_ptr<diskann::Index<T>> _pvamanaIndex =
           std::unique_ptr<diskann::Index<T>>(new diskann::Index<T>(
@@ -500,13 +506,16 @@ namespace diskann {
       _pvamanaIndex->save(shard_index_file.c_str());
       std::remove(shard_base_file.c_str());
     }
-    diskann::cout << timer.elapsed_seconds_for_step("building indices on shards") << std::endl;
+    diskann::cout << timer.elapsed_seconds_for_step(
+                         "building indices on shards")
+                  << std::endl;
 
     timer.reset();
     diskann::merge_shards(merged_index_prefix + "_subshard-", "_mem.index",
                           merged_index_prefix + "_subshard-", "_ids_uint32.bin",
                           num_parts, R, mem_index_path, medoids_file);
-   diskann::cout << timer.elapsed_seconds_for_step("merging indices") << std::endl;
+    diskann::cout << timer.elapsed_seconds_for_step("merging indices")
+                  << std::endl;
 
     // delete tempFiles
     for (int p = 0; p < num_parts; p++) {
@@ -920,7 +929,7 @@ namespace diskann {
 
     if (num_threads != 0) {
       omp_set_num_threads(num_threads);
-      mkl_set_num_threads(num_threads);
+      // mkl_set_num_threads(num_threads);
     }
 
     diskann::cout << "Starting index build: R=" << R << " L=" << L
@@ -956,7 +965,8 @@ namespace diskann {
     generate_quantized_data<T>(data_file_to_use, pq_pivots_path,
                                pq_compressed_vectors_path, compareMetric, p_val,
                                num_pq_chunks, use_opq);
-    diskann::cout << timer.elapsed_seconds_for_step("generating quantized data") << std::endl;
+    diskann::cout << timer.elapsed_seconds_for_step("generating quantized data")
+                  << std::endl;
 
 // Gopal. Splitting diskann_dll into separate DLLs for search and build.
 // This code should only be available in the "build" DLL.

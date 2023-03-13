@@ -10,6 +10,7 @@
 #include "utils.h"
 #define MAX_EVENTS 1024
 
+#ifndef __APPLE__
 namespace {
   typedef struct io_event io_event_t;
   typedef struct iocb     iocb_t;
@@ -198,3 +199,4 @@ void LinuxAlignedFileReader::read(std::vector<AlignedRead> &read_reqs,
   assert(this->file_desc != -1);
   execute_io(ctx, this->file_desc, read_reqs);
 }
+#endif

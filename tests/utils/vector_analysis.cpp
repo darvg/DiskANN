@@ -23,8 +23,8 @@
 template<typename T>
 int analyze_norm(std::string base_file) {
   std::cout << "Analyzing data norms" << std::endl;
-  T*   data;
-  _u64 npts, ndims;
+  T*     data;
+  size_t npts, ndims;
   diskann::load_bin<T>(base_file, data, npts, ndims);
   std::vector<float> norms(npts, 0);
 #pragma omp parallel for schedule(dynamic)
@@ -46,8 +46,8 @@ int analyze_norm(std::string base_file) {
 template<typename T>
 int normalize_base(std::string base_file, std::string out_file) {
   std::cout << "Normalizing base" << std::endl;
-  T*   data;
-  _u64 npts, ndims;
+  T*     data;
+  size_t npts, ndims;
   diskann::load_bin<T>(base_file, data, npts, ndims);
   //  std::vector<float> norms(npts, 0);
 #pragma omp parallel for schedule(dynamic)
@@ -68,8 +68,8 @@ template<typename T>
 int augment_base(std::string base_file, std::string out_file,
                  bool prep_base = true) {
   std::cout << "Analyzing data norms" << std::endl;
-  T*   data;
-  _u64 npts, ndims;
+  T*     data;
+  size_t npts, ndims;
   diskann::load_bin<T>(base_file, data, npts, ndims);
   std::vector<float> norms(npts, 0);
   float              max_norm = 0;

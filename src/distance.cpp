@@ -6,12 +6,15 @@
 #include <smmintrin.h>
 #include <tmmintrin.h>
 #include <intrin.h>
+#include <cosine_similarity.h>
+#elif __APPLE__
+#include <Accelerate/Accelerate.h>
+#include <arm_neon.h>
 #else
 #include <immintrin.h>
+#include "simd_utils.h"
 #endif
 
-#include "simd_utils.h"
-#include <cosine_similarity.h>
 #include <iostream>
 
 #include "distance.h"
@@ -298,7 +301,10 @@ namespace diskann {
              unpack[5] + unpack[6] + unpack[7];
 
 #else
-#ifdef __SSE2__
+#ifdef __APPLE__
+    vDSP_dotpr((float *) a, (vDSP_Stride) 1, (float *) b, (vDSP_Stride) 1,
+               &result, size);
+#elif __SSE2__
 #define SSE_DOT(addr1, addr2, dest, tmp1, tmp2) \
   tmp1 = _mm128_loadu_ps(addr1);                \
   tmp2 = _mm128_loadu_ps(addr2);                \
@@ -406,8 +412,9 @@ namespace diskann {
     _mm256_storeu_ps(unpack, sum);
     result = unpack[0] + unpack[1] + unpack[2] + unpack[3] + unpack[4] +
              unpack[5] + unpack[6] + unpack[7];
-#else
-#ifdef __SSE2__
+#elif __APPLE__
+    vDSP_dotpr((float *) a, 1, (float *) a, 1, &result, size);
+#elif __SSE2__
 #define SSE_L2NORM(addr, dest, tmp) \
   tmp = _mm128_loadu_ps(addr);      \
   tmp = _mm128_mul_ps(tmp, tmp);    \
@@ -462,25 +469,27 @@ namespace diskann {
     }
 #endif
 #endif
-#endif
     return result;
   }
 
   float AVXDistanceInnerProductFloat::compare(const float *a, const float *b,
                                               uint32_t size) const {
     float result = 0.0f;
+#ifdef __APPLE__
+    vDSP_dotpr(a, (vDSP_Stride) 1, b, (vDSP_Stride) 1, &result, size);
+#else
 #define AVX_DOT(addr1, addr2, dest, tmp1, tmp2) \
   tmp1 = _mm256_loadu_ps(addr1);                \
   tmp2 = _mm256_loadu_ps(addr2);                \
   tmp1 = _mm256_mul_ps(tmp1, tmp2);             \
   dest = _mm256_add_ps(dest, tmp1);
 
-    __m256       sum;
-    __m256       l0, l1;
-    __m256       r0, r1;
-    unsigned     D = (size + 7) & ~7U;
-    unsigned     DR = D % 16;
-    unsigned     DD = D - DR;
+    __m256 sum;
+    __m256 l0, l1;
+    __m256 r0, r1;
+    unsigned D = (size + 7) & ~7U;
+    unsigned DR = D % 16;
+    unsigned DD = D - DR;
     const float *l = (float *) a;
     const float *r = (float *) b;
     const float *e_l = l + DD;
@@ -503,7 +512,7 @@ namespace diskann {
     _mm256_storeu_ps(unpack, sum);
     result = unpack[0] + unpack[1] + unpack[2] + unpack[3] + unpack[4] +
              unpack[5] + unpack[6] + unpack[7];
-
+#endif
     return -result;
   }
 

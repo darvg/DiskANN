@@ -20,7 +20,11 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include "apple_aligned_file_reader.h"
+#else
 #include "linux_aligned_file_reader.h"
+#endif
 #else
 #ifdef USE_BING_INFRA
 #include "bing_aligned_file_reader.h"
@@ -68,7 +72,8 @@ int search_disk_index(diskann::Metric&   metric,
   // load query bin
   T*                             query = nullptr;
   std::vector<std::vector<_u32>> groundtruth_ids;
-  size_t query_num, query_dim, query_aligned_dim, gt_num;
+  size_t                         query_num, query_dim, query_aligned_dim;
+  _u64                           gt_num;
   diskann::load_aligned_bin<T>(query_file, query, query_num, query_dim,
                                query_aligned_dim);
 
@@ -95,6 +100,8 @@ int search_disk_index(diskann::Metric&   metric,
 #else
   reader.reset(new diskann::BingAlignedFileReader());
 #endif
+#elif __APPLE__
+  reader.reset(new AppleAlignedFileReader());
 #else
   reader.reset(new LinuxAlignedFileReader());
 #endif
@@ -121,7 +128,7 @@ int search_disk_index(diskann::Metric&   metric,
   omp_set_num_threads(num_threads);
 
   uint64_t warmup_L = 20;
-  uint64_t warmup_num = 0, warmup_dim = 0, warmup_aligned_dim = 0;
+  size_t   warmup_num = 0, warmup_dim = 0, warmup_aligned_dim = 0;
   T*       warmup = nullptr;
 
   if (WARMUP) {
@@ -202,8 +209,8 @@ int search_disk_index(diskann::Metric&   metric,
       std::vector<_u64>  indices;
       std::vector<float> distances;
       _u32               res_count = _pFlashIndex->range_search(
-                        query + (i * query_aligned_dim), search_range, L, max_list_size,
-                        indices, distances, optimized_beamwidth, stats + i);
+          query + (i * query_aligned_dim), search_range, L, max_list_size,
+          indices, distances, optimized_beamwidth, stats + i);
       query_result_ids[test_id][i].reserve(res_count);
       query_result_ids[test_id][i].resize(res_count);
       for (_u32 idx = 0; idx < res_count; idx++)

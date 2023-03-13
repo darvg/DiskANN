@@ -9,6 +9,8 @@
 
 #ifdef _WINDOWS
 #include "windows_aligned_file_reader.h"
+#elif __APPLE__
+#include "apple_aligned_file_reader.h"
 #else
 #include "linux_aligned_file_reader.h"
 #endif
@@ -200,8 +202,8 @@ namespace diskann {
       this->node_visit_counter[i].second = 0;
     }
 
-    _u64 sample_num, sample_dim, sample_aligned_dim;
-    T   *samples;
+    size_t sample_num, sample_dim, sample_aligned_dim;
+    T     *samples;
 
 #ifdef EXEC_ENV_OLS
     if (files.fileExists(sample_bin)) {
@@ -310,8 +312,8 @@ namespace diskann {
       for (size_t block = 0; block < nblocks && !finish_flag; block++) {
         diskann::cout << "." << std::flush;
         size_t start = block * BLOCK_SIZE;
-        size_t end =
-            (std::min)((block + 1) * BLOCK_SIZE, nodes_to_expand.size());
+        size_t end = std::min<size_t>((size_t) (block + 1) * BLOCK_SIZE,
+                                      (size_t) nodes_to_expand.size());
         std::vector<AlignedRead>             read_reqs;
         std::vector<std::pair<_u32, char *>> nhoods;
         for (size_t cur_pt = start; cur_pt < end; cur_pt++) {
@@ -700,7 +702,7 @@ namespace diskann {
     std::string norm_file = std::string(disk_index_file) + "_max_base_norm.bin";
 
     if (file_exists(norm_file) && metric == diskann::Metric::INNER_PRODUCT) {
-      _u64   dumr, dumc;
+      size_t dumr, dumc;
       float *norm_val;
       diskann::load_bin<float>(norm_file, norm_val, dumr, dumc);
       this->max_base_norm = norm_val[0];

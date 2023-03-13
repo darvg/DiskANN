@@ -29,7 +29,7 @@
 // block size for reading/ processing large files and matrices in blocks
 #define BLOCK_SIZE 5000000
 
-//#define SAVE_INFLATED_PQ true
+// #define SAVE_INFLATED_PQ true
 
 template<typename T>
 void gen_random_slice(const std::string base_file,
@@ -436,8 +436,8 @@ int retrieve_shard_data_from_ids(const std::string data_file,
   shard_data_writer.write((char *) &dummy_size, sizeof(uint32_t));
   shard_data_writer.write((char *) &basedim32, sizeof(uint32_t));
 
-  _u32 *shard_ids;
-  _u64  shard_size, tmp;
+  _u32  *shard_ids;
+  size_t shard_size, tmp;
   diskann::load_bin<_u32>(idmap_filename, shard_ids, shard_size, tmp);
 
   _u32 cur_pos = 0;

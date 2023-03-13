@@ -15,15 +15,16 @@
 #   Contact for this feature: gopalrs.
 
 # Some variables like MSVC are defined only after project(), so put that first.
+
+set(CMAKE_CXX_COMPILER "/opt/homebrew/Cellar/llvm/15.0.7_1/bin/clang++")
+set(CMAKE_C_COMPILER "/opt/homebrew/Cellar/llvm/15.0.7_1/bin/clang")
+# set(CMAKE_CXX_COMPILER "g++")
+# set(CMAKE_C_COMPILER "gcc")
 project(diskann)
 
 cmake_minimum_required(VERSION 3.15)
 
 set(CMAKE_STANDARD 14)
-
-if(NOT MSVC)
-	set(CMAKE_CXX_COMPILER g++)
-endif()
 
 # Install nuget packages for dependencies.
 if (MSVC)
@@ -135,6 +136,12 @@ if (MSVC)
         "${DISKANN_MKL_LIB_PATH}/mkl_core.lib"
         "${DISKANN_MKL_LIB_PATH}/mkl_intel_thread.lib")
 else()
+  if (APPLE)
+    # no mkl on non-intel devices
+    find_library(ACCELERATE_LIBRARY Accelerate)
+    message(STATUS "Found Accelerate (${ACCELERATE_LIBRARY})")
+    set(DISKANN_ACCEL_LINK_OPTIONS ${ACCELERATE_LIBRARY})
+  else()
     # expected path for manual intel mkl installs
     set(OMP_PATH /opt/intel/oneapi/compiler/2022.0.2/linux/compiler/lib/intel64_lin/ CACHE PATH "Intel OneAPI OpenMP library implementation path")
     set(MKL_ROOT /opt/intel/oneapi/mkl/latest CACHE PATH "Intel OneAPI MKL library implementation path")
@@ -148,9 +155,11 @@ else()
     # compile flags and link libraries
     add_compile_options(-m64 -Wl,--no-as-needed)
     link_libraries(mkl_intel_ilp64 mkl_intel_thread mkl_core iomp5 pthread m dl)
+
+    add_definitions(-DMKL_ILP64)
+  endif()
 endif()
 
-add_definitions(-DMKL_ILP64)
 
 # Section for tcmalloc. The DiskANN tools are always linked to tcmalloc. For Windows, they also need to
 # force-include the _tcmalloc symbol for enabling tcmalloc.
@@ -194,7 +203,11 @@ if (MSVC)
 
     set(DISKANN_TOOLS_TCMALLOC_LINK_OPTIONS libtcmalloc_minimal_for_exe)
 else()
+  if(APPLE)
+    set(DISKANN_TOOLS_TCMALLOC_LINK_OPTIONS "-L/opt/homebrew/Cellar/gperftools/2.10/lib -ltcmalloc")
+  else()
     set(DISKANN_TOOLS_TCMALLOC_LINK_OPTIONS "-ltcmalloc")
+  endif()
 endif()
 
 if (DISKANN_RELEASE_UNUSED_TCMALLOC_MEMORY_AT_CHECKPOINTS)
@@ -206,7 +219,9 @@ if (DISKANN_RELEASE_UNUSED_TCMALLOC_MEMORY_AT_CHECKPOINTS)
 endif()
 
 if (NOT MSVC)
+  if (NOT APPLE)
     set(DISKANN_ASYNC_LIB aio)
+  endif()
 endif()
 
 #Main compiler/linker settings 
@@ -234,8 +249,8 @@ else()
 	set(ENV{TCMALLOC_LARGE_ALLOC_REPORT_THRESHOLD} 500000000000)
     #	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -DDEBUG -O0 -fsanitize=address -fsanitize=leak -fsanitize=undefined")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -DDEBUG -Wall -Wextra")
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -DNDEBUG -march=native -mtune=native -ftree-vectorize")
-	add_compile_options(-march=native -Wall -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -fopenmp -fopenmp-simd -funroll-loops -Wfatal-errors -DUSE_AVX2)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Ofast -DNDEBUG -march=native -mtune=native -ftree-vectorize")
+	add_compile_options(-march=native -Wall -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -Xclang -fopenmp -fopenmp-simd -funroll-loops -Wfatal-errors)
     if (PYBIND)
         add_compile_options(-fPIC)
     endif()

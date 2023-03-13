@@ -36,7 +36,7 @@ int build_in_memory_index(const diskann::Metric& metric,
   paras.Set<bool>("saturate_graph", 0);
   paras.Set<unsigned>("num_threads", num_threads);
 
-  _u64 data_num, data_dim;
+  size_t data_num, data_dim;
   diskann::get_bin_metadata(data_path, data_num, data_dim);
 
   diskann::Index<T, TagT> index(metric, data_dim, data_num, false, false, false,
@@ -89,7 +89,8 @@ int main(int argc, char** argv) {
         "Number of threads used for building index (defaults to "
         "omp_get_num_procs())");
     desc.add_options()(
-        "build_PQ_bytes", po::value<uint32_t>(&build_PQ_bytes)->default_value(0),
+        "build_PQ_bytes",
+        po::value<uint32_t>(&build_PQ_bytes)->default_value(0),
         "Number of PQ bytes to build the index; 0 for full precision build");
     desc.add_options()(
         "use_opq", po::bool_switch()->default_value(false),
@@ -129,17 +130,17 @@ int main(int argc, char** argv) {
                   << "  alpha: " << alpha << "  #threads: " << num_threads
                   << std::endl;
     if (data_type == std::string("int8"))
-      return build_in_memory_index<int8_t>(metric, data_path, R, L, alpha,
-                                           index_path_prefix, num_threads,
-                                           use_pq_build, build_PQ_bytes, use_opq);
+      return build_in_memory_index<int8_t>(
+          metric, data_path, R, L, alpha, index_path_prefix, num_threads,
+          use_pq_build, build_PQ_bytes, use_opq);
     else if (data_type == std::string("uint8"))
       return build_in_memory_index<uint8_t>(
           metric, data_path, R, L, alpha, index_path_prefix, num_threads,
           use_pq_build, build_PQ_bytes, use_opq);
     else if (data_type == std::string("float"))
-      return build_in_memory_index<float>(metric, data_path, R, L, alpha,
-                                          index_path_prefix, num_threads,
-                                          use_pq_build, build_PQ_bytes, use_opq);
+      return build_in_memory_index<float>(
+          metric, data_path, R, L, alpha, index_path_prefix, num_threads,
+          use_pq_build, build_PQ_bytes, use_opq);
     else {
       std::cout << "Unsupported type. Use one of int8, uint8 or float."
                 << std::endl;

@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
+#ifdef __APPLE__
+#include <Accelerate/Accelerate.h>
+#else
 #include "mkl.h"
+#endif
 
 #include "pq.h"
 #include "partition.h"
@@ -12,6 +16,9 @@
 #define BLOCK_SIZE 5000000
 
 namespace diskann {
+#ifdef __APPLE__
+  typedef long long int MKL_INT;
+#endif
   FixedChunkPQTable::FixedChunkPQTable() {
   }
 
@@ -39,7 +46,7 @@ namespace diskann {
                                                size_t      num_chunks) {
 #endif
 
-    _u64        nr, nc;
+    size_t      nr, nc;
     std::string rotmat_file =
         std::string(pq_table_file) + "_rotation_matrix.bin";
 
@@ -269,9 +276,9 @@ namespace diskann {
     }
   }
 
-   void pq_dist_lookup(const _u8* pq_ids, const _u64 n_pts,
+  void pq_dist_lookup(const _u8* pq_ids, const _u64 n_pts,
                       const _u64 pq_nchunks, const float* pq_dists,
-                      std::vector<float> &dists_out) {
+                      std::vector<float>& dists_out) {
     //_mm_prefetch((char*) dists_out, _MM_HINT_T0);
     _mm_prefetch((char*) pq_ids, _MM_HINT_T0);
     _mm_prefetch((char*) (pq_ids + 64), _MM_HINT_T0);
@@ -290,8 +297,8 @@ namespace diskann {
     }
   }
 
-
-  // Need to replace calls to these functions with calls to vector& based functions above
+  // Need to replace calls to these functions with calls to vector& based
+  // functions above
   void aggregate_coords(const unsigned* ids, const _u64 n_ids,
                         const _u8* all_coords, const _u64 ndims, _u8* out) {
     for (_u64 i = 0; i < n_ids; i++) {
@@ -473,8 +480,8 @@ namespace diskann {
         cumul_bytes[2] + diskann::save_bin<uint32_t>(
                              pq_pivots_path.c_str(), chunk_offsets.data(),
                              chunk_offsets.size(), 1, cumul_bytes[2]);
-    diskann::save_bin<_u64>(pq_pivots_path.c_str(), cumul_bytes.data(),
-                            cumul_bytes.size(), 1, 0);
+    diskann::save_bin<size_t>(pq_pivots_path.c_str(), cumul_bytes.data(),
+                              cumul_bytes.size(), 1, 0);
 
     diskann::cout << "Saved pq pivot data to " << pq_pivots_path << " of size "
                   << cumul_bytes[cumul_bytes.size() - 1] << "B." << std::endl;
@@ -660,10 +667,18 @@ namespace diskann {
 
       // compute the SVD of the correlation matrix to help determine the new
       // rotation matrix
+#ifdef __APPLE__
+      _u32 errcode = (_u32) LAPACKE_sgesdd(
+          LAPACK_ROW_MAJOR, 'A', (clp_int) dim, (clp_int) dim,
+          correlation_matrix.get(), (clp_int) dim, singular_values.get(),
+          Umat.get(), (clp_int) dim, Vmat_T.get(), (clp_int) dim);
+
+#else
       _u32 errcode = LAPACKE_sgesdd(
           LAPACK_ROW_MAJOR, 'A', (MKL_INT) dim, (MKL_INT) dim,
           correlation_matrix.get(), (MKL_INT) dim, singular_values.get(),
           Umat.get(), (MKL_INT) dim, Vmat_T.get(), (MKL_INT) dim);
+#endif
 
       if (errcode > 0) {
         std::cout << "SVD failed to converge." << std::endl;
@@ -692,8 +707,8 @@ namespace diskann {
         cumul_bytes[2] + diskann::save_bin<uint32_t>(
                              opq_pivots_path.c_str(), chunk_offsets.data(),
                              chunk_offsets.size(), 1, cumul_bytes[2]);
-    diskann::save_bin<_u64>(opq_pivots_path.c_str(), cumul_bytes.data(),
-                            cumul_bytes.size(), 1, 0);
+    diskann::save_bin<size_t>(opq_pivots_path.c_str(), cumul_bytes.data(),
+                              cumul_bytes.size(), 1, 0);
 
     diskann::cout << "Saved opq pivot data to " << opq_pivots_path
                   << " of size " << cumul_bytes[cumul_bytes.size() - 1] << "B."
@@ -736,7 +751,7 @@ namespace diskann {
       std::cout << "ERROR: PQ k-means pivot file not found" << std::endl;
       throw diskann::ANNException("PQ k-means pivot file not found", -1);
     } else {
-      _u64                    nr, nc;
+      size_t                  nr, nc;
       std::unique_ptr<_u64[]> file_offset_data;
 
       diskann::load_bin<_u64>(pq_pivots_path.c_str(), file_offset_data, nr, nc,

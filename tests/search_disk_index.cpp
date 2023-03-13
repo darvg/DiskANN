@@ -17,7 +17,11 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include "apple_aligned_file_reader.h"
+#else
 #include "linux_aligned_file_reader.h"
+#endif
 #else
 #ifdef USE_BING_INFRA
 #include "bing_aligned_file_reader.h"
@@ -91,6 +95,8 @@ int search_disk_index(
 #else
   reader.reset(new diskann::BingAlignedFileReader());
 #endif
+#elif __APPLE__
+  reader.reset(new AppleAlignedFileReader());
 #else
   reader.reset(new LinuxAlignedFileReader());
 #endif
@@ -118,7 +124,7 @@ int search_disk_index(
   omp_set_num_threads(num_threads);
 
   uint64_t warmup_L = 20;
-  uint64_t warmup_num = 0, warmup_dim = 0, warmup_aligned_dim = 0;
+  size_t   warmup_num = 0, warmup_dim = 0, warmup_aligned_dim = 0;
   T*       warmup = nullptr;
 
   if (WARMUP) {

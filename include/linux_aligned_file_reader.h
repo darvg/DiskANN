@@ -3,6 +3,7 @@
 
 #pragma once
 #ifndef _WINDOWS
+#ifndef __APPLE__
 
 #include "aligned_file_reader.h"
 
@@ -36,4 +37,5 @@ class LinuxAlignedFileReader : public AlignedFileReader {
             bool async = false);
 };
 
+#endif
 #endif

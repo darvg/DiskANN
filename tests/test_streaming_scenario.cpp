@@ -338,15 +338,15 @@ int main(int argc, char** argv) {
 
     desc.add_options()(
         "max_points_to_insert",
-        po::value<uint64_t>(&max_points_to_insert)->default_value(0),
+        po::value<size_t>(&max_points_to_insert)->default_value(0),
         "The number of points from the file that the program streams over ");
     desc.add_options()("active_window",
-                       po::value<uint64_t>(&active_window)->required(),
+                       po::value<size_t>(&active_window)->required(),
                        "Program maintains an index over an active window of "
                        "this size that slides through the data");
     desc.add_options()(
         "consolidate_interval",
-        po::value<uint64_t>(&consolidate_interval)->required(),
+        po::value<size_t>(&consolidate_interval)->required(),
         "The program simultaneously adds this number of points to the right of "
         "the window while deleting the same number from the left");
     desc.add_options()(

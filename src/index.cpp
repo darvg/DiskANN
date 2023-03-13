@@ -719,7 +719,7 @@ namespace diskann {
     boost::dynamic_bitset<> &inserted_into_pool_bs =
         scratch->inserted_into_pool_bs();
     std::vector<unsigned> &id_scratch = scratch->id_scratch();
-    std::vector<float> &dist_scratch = scratch->dist_scratch();
+    std::vector<float>    &dist_scratch = scratch->dist_scratch();
     assert(id_scratch.size() == 0);
     T *aligned_query = scratch->aligned_query();
     memcpy(aligned_query, query, _dim * sizeof(T));
@@ -822,7 +822,7 @@ namespace diskann {
     uint32_t cmps = 0;
 
     while (best_L_nodes.has_unexpanded_node()) {
-      auto nbr = best_L_nodes.closest_unexpanded();   
+      auto nbr = best_L_nodes.closest_unexpanded();
       auto n = nbr.id;
       // Add node to expanded nodes to create pool for prune later
       if (!search_invocation &&
@@ -871,7 +871,7 @@ namespace diskann {
                 sizeof(T) * _aligned_dim);
           }
 
-          dist_scratch.push_back( _distance->compare(
+          dist_scratch.push_back(_distance->compare(
               aligned_query, _data + _aligned_dim * (size_t) id,
               (unsigned) _aligned_dim));
         }
@@ -937,7 +937,6 @@ namespace diskann {
     // Initialize occlude_factor to pool.size() many 0.0f values for correctness
     occlude_factor.insert(occlude_factor.end(), pool.size(), 0.0f);
 
-
     float cur_alpha = 1;
     while (cur_alpha <= alpha && result.size() < degree) {
       // used for MIPS, where we store a value of eps in cur_alpha to
@@ -951,7 +950,8 @@ namespace diskann {
         }
         // Set the entry to float::max so that is not considered again
         occlude_factor[iter - pool.begin()] = std::numeric_limits<float>::max();
-        // Add the entry to the result if its not been deleted, and doesn't add a self loop
+        // Add the entry to the result if its not been deleted, and doesn't add
+        // a self loop
         if (delete_set_ptr == nullptr ||
             delete_set_ptr->find(iter->id) == delete_set_ptr->end()) {
           if (iter->id != location) {
@@ -1010,7 +1010,7 @@ namespace diskann {
 
     // If using _pq_build, over-write the PQ distances with actual distances
     if (_pq_dist) {
-      for (auto& ngh : pool)
+      for (auto &ngh : pool)
         ngh.distance = _distance->compare(
             _data + _aligned_dim * (size_t) ngh.id,
             _data + _aligned_dim * (size_t) location, (unsigned) _aligned_dim);
@@ -1322,7 +1322,7 @@ namespace diskann {
     }
 
     std::unique_lock<std::shared_timed_mutex> ul(_update_lock);
-    
+
     {
       std::unique_lock<std::shared_timed_mutex> tl(_tag_lock);
       _nd = num_points_to_load;
@@ -1517,14 +1517,14 @@ namespace diskann {
     std::vector<unsigned> init_ids;
     init_ids.push_back(_start);
     std::shared_lock<std::shared_timed_mutex> lock(_update_lock);
-    auto retval =
+    auto                                      retval =
         iterate_to_fixed_point(query, L, init_ids, scratch, true, true);
     NeighborPriorityQueue &best_L_nodes = scratch->best_l_nodes();
 
     size_t pos = 0;
     for (int i = 0; i < best_L_nodes.size(); ++i) {
       if (best_L_nodes[i].id < _max_points) {
-        // safe because Index uses uint32_t ids internally 
+        // safe because Index uses uint32_t ids internally
         // and IDType will be uint32_t or uint64_t
         indices[pos] = (IdType) best_L_nodes[i].id;
         if (distances != nullptr) {
@@ -1731,8 +1731,7 @@ namespace diskann {
       }
     }
   }
-  
-   
+
   // Returns number of live points left after consolidation
   template<typename T, typename TagT>
   consolidation_report Index<T, TagT>::consolidate_deletes(
@@ -1982,7 +1981,7 @@ namespace diskann {
                   << timer.elapsed() / 1000000. << "s." << std::endl;
   }
 
-  // 
+  //
   // Caller must hold unique _tag_lock and _delete_lock before calling this
   //
   template<typename T, typename TagT>

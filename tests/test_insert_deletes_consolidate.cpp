@@ -392,32 +392,31 @@ int main(int argc, char** argv) {
         "Number of threads used for building index (defaults to "
         "omp_get_num_procs())");
     desc.add_options()("points_to_skip",
-                       po::value<uint64_t>(&points_to_skip)->required(),
+                       po::value<size_t>(&points_to_skip)->required(),
                        "Skip these first set of points from file");
     desc.add_options()(
         "max_points_to_insert",
-        po::value<uint64_t>(&max_points_to_insert)->default_value(0),
+        po::value<size_t>(&max_points_to_insert)->default_value(0),
         "These number of points from the file are inserted after "
         "points_to_skip");
     desc.add_options()("beginning_index_size",
-                       po::value<uint64_t>(&beginning_index_size)->required(),
+                       po::value<size_t>(&beginning_index_size)->required(),
                        "Batch build will be called on these set of points");
     desc.add_options()(
         "points_per_checkpoint",
-        po::value<uint64_t>(&points_per_checkpoint)->required(),
+        po::value<size_t>(&points_per_checkpoint)->required(),
         "Insertions are done in batches of points_per_checkpoint");
-    desc.add_options()(
-        "checkpoints_per_snapshot",
-        po::value<uint64_t>(&checkpoints_per_snapshot)->required(),
-        "Save the index to disk every few checkpoints");
+    desc.add_options()("checkpoints_per_snapshot",
+                       po::value<size_t>(&checkpoints_per_snapshot)->required(),
+                       "Save the index to disk every few checkpoints");
     desc.add_options()(
         "points_to_delete_from_beginning",
-        po::value<uint64_t>(&points_to_delete_from_beginning)->required(), "");
+        po::value<size_t>(&points_to_delete_from_beginning)->required(), "");
     desc.add_options()("do_concurrent",
                        po::value<bool>(&concurrent)->default_value(false), "");
     desc.add_options()(
         "start_deletes_after",
-        po::value<uint64_t>(&start_deletes_after)->default_value(0), "");
+        po::value<size_t>(&start_deletes_after)->default_value(0), "");
     desc.add_options()(
         "start_point_norm",
         po::value<float>(&start_point_norm)->default_value(0),
