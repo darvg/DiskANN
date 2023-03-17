@@ -413,7 +413,7 @@ namespace diskann {
   size_t Index<T, TagT>::load_delete_set(const std::string &filename) {
 #endif
     std::unique_ptr<_u32[]> delete_list;
-    _u64                    npts, ndim;
+    size_t                  npts, ndim;
 
 #ifdef EXEC_ENV_OLS
     diskann::load_bin<_u32>(reader, delete_list, npts, ndim);
@@ -1425,8 +1425,10 @@ namespace diskann {
                                        file_num_points, _num_pq_chunks,
                                        _num_pq_chunks);
 #ifdef EXEC_ENV_OLS
-      throw ANNException("load_pq_centroid_bin should not be called when EXEC_ENV_OLS is defined.",
-                         -1, __FUNCSIG__, __FILE__, __LINE__);
+      throw ANNException(
+          "load_pq_centroid_bin should not be called when EXEC_ENV_OLS is "
+          "defined.",
+          -1, __FUNCSIG__, __FILE__, __LINE__);
 #else
       _pq_table.load_pq_centroid_bin(pq_pivots_file.c_str(), _num_pq_chunks);
 #endif

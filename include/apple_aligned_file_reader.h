@@ -4,7 +4,6 @@
 
 class AppleAlignedFileReader : public AlignedFileReader {
  private:
-  uint64_t   file_sz;
   FileHandle file_desc;
 
  public:

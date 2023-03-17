@@ -88,6 +88,8 @@ void AppleAlignedFileReader::deregister_all_threads() {
     dispatch_release(ctx.channel);
     dispatch_release(ctx.grp);
   }
+  std::cerr << "apple aligned reader: cleared all queues and channels"
+            << std::endl;
   ctx_map.clear();
 }
 
