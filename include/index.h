@@ -4,6 +4,7 @@
 #pragma once
 
 #include "common_includes.h"
+#include <boost/dynamic_bitset/dynamic_bitset.hpp>
 
 #ifdef EXEC_ENV_OLS
 #include "aligned_file_reader.h"
@@ -234,7 +235,7 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     std::pair<uint32_t, uint32_t> iterate_to_fixed_point(const T *node_coords, const uint32_t Lindex,
                                                          const std::vector<uint32_t> &init_ids,
                                                          InMemQueryScratch<T> *scratch, bool use_filter,
-                                                         const std::vector<LabelT> &filters, bool search_invocation);
+                                                         const unsigned long &filters, bool search_invocation);
 
     void search_for_point_and_prune(int location, uint32_t Lindex, std::vector<uint32_t> &pruned_list,
                                     InMemQueryScratch<T> *scratch, bool use_filter = false,
@@ -349,7 +350,9 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     bool _normalize_vecs = false; // Using normalied L2 for cosine.
 
     // Filter Support
-
+		std::vector<unsigned long> _pts_to_bitstring_labels;
+		boost::dynamic_bitset<> _universal_label_bitset;
+		unsigned long _universal_label_bitset_num;
     bool _filtered_index = false;
     std::vector<std::vector<LabelT>> _pts_to_labels;
     tsl::robin_set<LabelT> _labels;

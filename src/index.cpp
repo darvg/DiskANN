@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
+#include <boost/dynamic_bitset/dynamic_bitset.hpp>
 #include <type_traits>
 #include <omp.h>
 
@@ -882,7 +883,7 @@ template <typename T, typename TagT, typename LabelT> std::vector<uint32_t> Inde
 template <typename T, typename TagT, typename LabelT>
 std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
     const T *query, const uint32_t Lsize, const std::vector<uint32_t> &init_ids, InMemQueryScratch<T> *scratch,
-    bool use_filter, const std::vector<LabelT> &filter_label, bool search_invocation)
+    bool use_filter, const unsigned long &filter_label, bool search_invocation)
 {
     std::vector<Neighbor> &expanded_nodes = scratch->pool();
     NeighborPriorityQueue &best_L_nodes = scratch->best_l_nodes();
@@ -971,19 +972,19 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
 
         if (use_filter)
         {
-            std::vector<LabelT> common_filters;
-            auto &x = _pts_to_labels[id];
-            std::set_intersection(filter_label.begin(), filter_label.end(), x.begin(), x.end(),
-                                  std::back_inserter(common_filters));
-            if (_use_universal_label)
+						bool skip = true;
+						auto &y = _pts_to_bitstring_labels[id];
+						
+						if ((y & filter_label) != 0)
+          		skip = false;
+						if (_use_universal_label)
             {
-                if (std::find(filter_label.begin(), filter_label.end(), _universal_label) != filter_label.end() ||
-                    std::find(x.begin(), x.end(), _universal_label) != x.end())
-                    common_filters.emplace_back(_universal_label);
+							if ((_universal_label_bitset_num & filter_label) != 0 || (_universal_label_bitset_num & y) != 0)
+								skip = false;
             }
 
-            if (common_filters.size() == 0)
-                continue;
+						if (skip)
+							continue;
         }
 
         if (is_not_visited(id))
@@ -1042,24 +1043,22 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
             for (auto id : _final_graph[n])
             {
                 assert(id < _max_points + _num_frozen_pts);
-
                 if (use_filter)
                 {
                     // NOTE: NEED TO CHECK IF THIS CORRECT WITH NEW LOCKS.
-                    std::vector<LabelT> common_filters;
-                    auto &x = _pts_to_labels[id];
-                    std::set_intersection(filter_label.begin(), filter_label.end(), x.begin(), x.end(),
-                                          std::back_inserter(common_filters));
-                    if (_use_universal_label)
-                    {
-                        if (std::find(filter_label.begin(), filter_label.end(), _universal_label) !=
-                                filter_label.end() ||
-                            std::find(x.begin(), x.end(), _universal_label) != x.end())
-                            common_filters.emplace_back(_universal_label);
-                    }
+										bool skip = true;
+										auto &y = _pts_to_bitstring_labels[id];
 
-                    if (common_filters.size() == 0)
-                        continue;
+										if ((y & filter_label) != 0)
+											skip = false;
+										if (_use_universal_label)
+										{
+											if ((_universal_label_bitset_num & filter_label) != 0 || (_universal_label_bitset_num & y) != 0)
+												skip = false;
+										}
+
+										if (skip)
+											continue;
                 }
 
                 if (is_not_visited(id))
@@ -1127,7 +1126,7 @@ void Index<T, TagT, LabelT>::search_for_point_and_prune(int location, uint32_t L
                                                         uint32_t filteredLindex)
 {
     const std::vector<uint32_t> init_ids = get_init_ids();
-    const std::vector<LabelT> unused_filter_label;
+    const unsigned long unused_filter_label = 0;
 
     if (!use_filter)
     {
@@ -1140,7 +1139,7 @@ void Index<T, TagT, LabelT>::search_for_point_and_prune(int location, uint32_t L
         for (auto &x : _pts_to_labels[location])
             filter_specific_start_nodes.emplace_back(_label_to_medoid_id[x]);
         iterate_to_fixed_point(_data + _aligned_dim * location, filteredLindex, filter_specific_start_nodes, scratch,
-                               true, _pts_to_labels[location], false);
+                               true, _pts_to_bitstring_labels[location], false);
     }
 
     auto &pool = scratch->pool();
@@ -1898,6 +1897,7 @@ void Index<T, TagT, LabelT>::parse_label_file(const std::string &label_file, siz
         line_cnt++;
     }
     _pts_to_labels.resize(line_cnt, std::vector<LabelT>());
+		_pts_to_bitstring_labels.resize(line_cnt);
 
     infile.clear();
     infile.seekg(0, std::ios::beg);
@@ -1926,6 +1926,18 @@ void Index<T, TagT, LabelT>::parse_label_file(const std::string &label_file, siz
         _pts_to_labels[line_cnt] = lbls;
         line_cnt++;
     }
+
+		_universal_label_bitset.resize(_labels.size());
+		_universal_label_bitset.flip(_universal_label);
+		_universal_label_bitset_num = _universal_label_bitset.to_ulong();
+		for (size_t i = 0; i < _pts_to_labels.size(); i++) {
+			std::vector<LabelT> curr_labels = _pts_to_labels[i];
+			boost::dynamic_bitset<> bitstring_labels(_labels.size());
+			for (auto const &lbl : curr_labels) {
+				bitstring_labels.flip(lbl);
+			}
+			_pts_to_bitstring_labels[i] = bitstring_labels.to_ulong();
+		}	
     num_points = (size_t)line_cnt;
     diskann::cout << "Identified " << _labels.size() << " distinct label(s)" << std::endl;
 }
@@ -2030,7 +2042,7 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search(const T *query, con
         diskann::cout << "Resize completed. New scratch->L is " << scratch->get_L() << std::endl;
     }
 
-    const std::vector<LabelT> unused_filter_label;
+    const unsigned long unused_filter_label = 0;
     const std::vector<uint32_t> init_ids = get_init_ids();
 
     std::shared_lock<std::shared_timed_mutex> lock(_update_lock);
@@ -2108,11 +2120,14 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search_with_filters(const 
         throw diskann::ANNException("No filtered medoid found. exitting ", -1);
     }
     filter_vec.emplace_back(filter_label);
+		boost::dynamic_bitset<> filter_vec_bits(_labels.size());
+		filter_vec_bits.flip(filter_label);
+		unsigned long filter_vec_bits_num = filter_vec_bits.to_ulong();
 
     T *aligned_query = scratch->aligned_query();
     memcpy(aligned_query, query, _dim * sizeof(T));
 
-    auto retval = iterate_to_fixed_point(aligned_query, L, init_ids, scratch, true, filter_vec, true);
+    auto retval = iterate_to_fixed_point(aligned_query, L, init_ids, scratch, true, filter_vec_bits_num, true);
 
     auto best_L_nodes = scratch->best_l_nodes();
 
@@ -2169,7 +2184,7 @@ size_t Index<T, TagT, LabelT>::search_with_tags(const T *query, const uint64_t K
     std::shared_lock<std::shared_timed_mutex> ul(_update_lock);
 
     const std::vector<uint32_t> init_ids = get_init_ids();
-    const std::vector<LabelT> unused_filter_label;
+    const unsigned long unused_filter_label = 0;
 
     iterate_to_fixed_point(query, L, init_ids, scratch, false, unused_filter_label, true);
     NeighborPriorityQueue &best_L_nodes = scratch->best_l_nodes();
