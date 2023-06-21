@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
+#include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <random>
@@ -9,6 +11,7 @@
 #include <tuple>
 
 #include <omp.h>
+#include <tsl/robin_set.h>
 #include "filter_utils.h"
 #include "index.h"
 #include "parameters.h"
@@ -16,6 +19,210 @@
 
 namespace diskann
 {
+/*
+ * Parses queries with complex labels.
+ * For now, it can only handle labels in the form of (AND) OR (AND) OR (AND) ...
+ * TODO: Handle more complex queries.
+ */
+std::vector<label_set> query_filters_parser(std::string query_labels)
+{
+    char AND = '&';
+    char OR = '|';
+    std::vector<label_set> parsed_query_labels;
+
+    std::stringstream query_labels_stream(query_labels);
+    std::string or_query;
+    while (std::getline(query_labels_stream, or_query, AND))
+    {
+        std::stringstream or_query_stream(or_query);
+        std::string label;
+        label_set curr_labels;
+        while (std::getline(or_query_stream, label, OR))
+        {
+            curr_labels.insert(label);
+        }
+        parsed_query_labels.push_back(curr_labels);
+    }
+
+    return parsed_query_labels;
+}
+
+/*
+ * Parses a query labels file with complex filers.
+ */
+std::vector<std::vector<label_set>> parse_query_label_file(path filename)
+{
+    std::vector<std::vector<label_set>> result;
+    if (filename != "")
+    {
+        std::ifstream file(filename);
+        if (file.fail())
+        {
+            throw diskann::ANNException(std::string("Failed to open file ") + filename, -1);
+        }
+        std::string line;
+        while (std::getline(file, line))
+        {
+            if (line.empty())
+                throw diskann::ANNException("Malformed line in labels file (empty line)", -1);
+            if (line.back() == '\r' || line.back() == '\n')
+                line.erase(line.size() - 1);
+            result.push_back(query_filters_parser(line));
+        }
+        file.close();
+    }
+    else
+    {
+        throw diskann::ANNException(std::string("Failed to open file. filename can not be blank"), -1);
+    }
+
+    std::cout << "Parsed query label file. Has " << result.size() << " labelsets." << std::endl;
+    return result;
+}
+
+bool or_check(label_set query_labels, label_set base_labels)
+{
+    for (auto e : query_labels)
+    {
+        if (base_labels.count(e) > 0)
+            return true;
+    }
+    return false;
+}
+
+bool check_query_subset(std::vector<label_set> query_labels, label_set base_labels, std::string universal_label)
+{
+    if (base_labels.size() == 1 && base_labels.find(universal_label) != base_labels.end())
+    {
+        return true;
+    }
+
+    if (query_labels.size() > base_labels.size())
+    {
+        return false;
+    }
+
+    for (size_t i = 0; i < query_labels.size(); i++)
+    {
+        if (or_check(query_labels[i], base_labels))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+compute_base_points_per_query_return_values compute_base_points_per_query(
+    std::vector<std::vector<label_set>> query_pts_to_labels, std::vector<label_set> base_pts_to_labels,
+    std::string universal_label)
+{
+    size_t num_queries = query_pts_to_labels.size(), num_base_pts = base_pts_to_labels.size();
+    std::vector<std::vector<uint32_t>> base_pts_to_queries(num_base_pts);
+    std::vector<uint32_t> queries_to_num_base_pts(num_queries);
+#pragma omp parallel for
+    for (size_t curr_base_pt = 0; curr_base_pt < num_base_pts; curr_base_pt++)
+    {
+        label_set curr_base_labels = base_pts_to_labels[curr_base_pt];
+        std::vector<uint32_t> curr_base_queries(num_queries, num_queries + 1);
+        for (size_t curr_query = 0; curr_query < num_queries; curr_query++)
+        {
+            std::vector<label_set> curr_query_labels = query_pts_to_labels[curr_query];
+            if (check_query_subset(curr_query_labels, curr_base_labels, universal_label))
+            {
+                curr_base_queries.push_back(curr_query);
+            }
+        }
+        base_pts_to_queries[curr_base_pt] = curr_base_queries;
+    }
+
+    for (size_t base_id = 0; base_id < num_base_pts; base_id++)
+    {
+        std::vector<uint32_t> curr_queries = base_pts_to_queries[base_id];
+        curr_queries.erase(std::remove(curr_queries.begin(), curr_queries.end(), num_queries + 1), curr_queries.end());
+        curr_queries.shrink_to_fit();
+        base_pts_to_queries[base_id] = curr_queries;
+        for (auto q : curr_queries)
+        {
+            queries_to_num_base_pts[q]++;
+        }
+    }
+    std::cout << "Computed base points per query." << std::endl;
+    return std::make_tuple(base_pts_to_queries, queries_to_num_base_pts);
+}
+
+template <typename T>
+std::vector<tsl::robin_map<uint32_t, uint32_t>> generate_multiple_base_files(
+    std::vector<std::vector<uint32_t>> base_pts_to_queries, std::vector<uint32_t> queries_to_num_base_pts,
+    path input_data_path)
+{
+    auto file_writing_timer = std::chrono::high_resolution_clock::now();
+    std::ifstream input_data_stream(input_data_path);
+
+    uint32_t number_of_points, dimension;
+    input_data_stream.read((char *)&number_of_points, sizeof(uint32_t));
+    input_data_stream.read((char *)&dimension, sizeof(uint32_t));
+    const uint32_t VECTOR_SIZE = dimension * sizeof(T);
+
+    uint32_t number_of_queries = queries_to_num_base_pts.size();
+    std::vector<char *> base_data_per_query(number_of_queries);
+    std::vector<uint32_t> query_to_curr_pts(number_of_queries);
+    std::vector<tsl::robin_map<uint32_t, uint32_t>> base_new_ids_to_orig_ids(number_of_points);
+    std::cout << "generating files..." << std::endl;
+    for (uint32_t query_id = 0; query_id < number_of_queries; query_id++)
+    {
+        uint32_t curr_num_base_pts = queries_to_num_base_pts[query_id];
+        char *vectors = (char *)malloc(curr_num_base_pts * VECTOR_SIZE);
+        if (vectors == nullptr)
+        {
+            throw;
+        }
+        base_data_per_query[query_id] = vectors;
+        query_to_curr_pts[query_id] = 0;
+    }
+
+    for (uint32_t point_id = 0; point_id < number_of_points; point_id++)
+    {
+        if (base_pts_to_queries[point_id].size() == 0)
+            continue;
+        char *curr_vector = (char *)malloc(VECTOR_SIZE);
+        input_data_stream.read(curr_vector, VECTOR_SIZE);
+        for (auto query_id : base_pts_to_queries[point_id])
+        {
+            char *curr_label_vector_ptr = base_data_per_query[query_id] + (query_to_curr_pts[query_id] * VECTOR_SIZE);
+            memcpy(curr_label_vector_ptr, curr_vector, VECTOR_SIZE);
+            base_new_ids_to_orig_ids[query_id][query_to_curr_pts[query_id]] = point_id;
+            query_to_curr_pts[query_id]++;
+        }
+        free(curr_vector);
+    }
+    std::cout << "copied relevant vectors to each block" << std::endl;
+
+    for (uint32_t query_id = 0; query_id < number_of_queries; query_id++)
+    {
+        path curr_label_input_data_path(input_data_path + "_" + std::to_string(query_id));
+        uint32_t curr_num_base_pts = queries_to_num_base_pts[query_id];
+
+        std::ofstream query_file_stream;
+        query_file_stream.exceptions(std::ios::badbit | std::ios::failbit);
+        query_file_stream.open(curr_label_input_data_path, std::ios_base::binary);
+        query_file_stream.write((char *)&curr_num_base_pts, sizeof(uint32_t));
+        query_file_stream.write((char *)&dimension, sizeof(uint32_t));
+        query_file_stream.write((char *)base_data_per_query[query_id], curr_num_base_pts * VECTOR_SIZE);
+
+        query_file_stream.close();
+        free(base_data_per_query[query_id]);
+    }
+
+    input_data_stream.close();
+
+    std::chrono::duration<double> file_writing_time = std::chrono::high_resolution_clock::now() - file_writing_timer;
+    std::cout << "generated " << number_of_queries << "query-specific vector files for index building in time "
+              << file_writing_time.count() << "\n"
+              << std::endl;
+
+    return base_new_ids_to_orig_ids;
+}
+
 /*
  * Using passed in parameters and files generated from step 3,
  * builds a vanilla diskANN index for each label.
@@ -238,12 +445,14 @@ parse_label_file_return_values parse_label_file(path label_data_path, std::strin
             std::cerr << "Error: " << point_id << " has no labels." << std::endl;
             exit(-1);
         }
+        // std::sort(current_labels.begin(), current_labels.end());
         point_ids_to_labels[point_id] = current_labels;
         line_cnt++;
     }
 
     // for every point with universal label, set its label set to all labels
     // also, increment the count for number of points a label has
+    // std::sort(all_labels.begin(), all_labels.end());
     for (const auto &point_id : points_with_universal_label)
     {
         point_ids_to_labels[point_id] = all_labels;
@@ -280,5 +489,17 @@ template DISKANN_DLLEXPORT tsl::robin_map<std::string, std::vector<uint32_t>>
 generate_label_specific_vector_files_compat<int8_t>(path input_data_path,
                                                     tsl::robin_map<std::string, uint32_t> labels_to_number_of_points,
                                                     std::vector<label_set> point_ids_to_labels, label_set all_labels);
+
+template DISKANN_DLLEXPORT std::vector<tsl::robin_map<uint32_t, uint32_t>> generate_multiple_base_files<float>(
+    std::vector<std::vector<uint32_t>> base_pts_to_queries, std::vector<uint32_t> queries_to_num_base_pts,
+    path input_data_path);
+
+template DISKANN_DLLEXPORT std::vector<tsl::robin_map<uint32_t, uint32_t>> generate_multiple_base_files<uint8_t>(
+    std::vector<std::vector<uint32_t>> base_pts_to_queries, std::vector<uint32_t> queries_to_num_base_pts,
+    path input_data_path);
+
+template DISKANN_DLLEXPORT std::vector<tsl::robin_map<uint32_t, uint32_t>> generate_multiple_base_files<int8_t>(
+    std::vector<std::vector<uint32_t>> base_pts_to_queries, std::vector<uint32_t> queries_to_num_base_pts,
+    path input_data_path);
 
 } // namespace diskann
