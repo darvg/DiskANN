@@ -40,16 +40,23 @@ typedef int FileHandle;
 #include "windows_customizations.h"
 
 // custom types (for readability)
-typedef tsl::robin_set<std::string> label_set;
+typedef std::set<std::string> label_set;
 typedef std::string path;
+typedef std::string label;
 
 // structs for returning multiple items from a function
-typedef std::tuple<std::vector<label_set>, tsl::robin_map<std::string, uint32_t>, tsl::robin_set<std::string>>
+typedef std::tuple<std::vector<label_set>, tsl::robin_map<std::string, uint32_t>, label_set>
     parse_label_file_return_values;
 typedef std::tuple<std::vector<std::vector<uint32_t>>, uint64_t> load_label_index_return_values;
 
 namespace diskann
 {
+DISKANN_DLLEXPORT std::vector<std::vector<label_set>> parse_query_label_file(path filename);
+
+DISKANN_DLLEXPORT std::vector<std::vector<uint32_t>> compute_base_points_per_query(
+    std::vector<std::vector<label_set>> query_pts_to_labels, std::vector<label_set> base_pts_to_labels,
+    std::string universal_label);
+
 template <typename T>
 DISKANN_DLLEXPORT void generate_label_indices(path input_data_path, path final_index_path_prefix, label_set all_labels,
                                               unsigned R, unsigned L, float alpha, unsigned num_threads);

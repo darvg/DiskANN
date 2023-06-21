@@ -35,9 +35,6 @@
 #define ALIGNMENT 512
 
 // custom types (for readability)
-typedef tsl::robin_set<std::string> label_set;
-typedef std::string path;
-
 namespace po = boost::program_options;
 
 template <class T> T div_round_up(const T numerator, const T denominator)

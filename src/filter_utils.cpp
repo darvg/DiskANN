@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
+#include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <random>
@@ -9,6 +11,7 @@
 #include <tuple>
 
 #include <omp.h>
+#include <tsl/robin_set.h>
 #include "filter_utils.h"
 #include "index.h"
 #include "parameters.h"
@@ -16,6 +19,123 @@
 
 namespace diskann
 {
+/*
+ * Parses queries with complex labels.
+ * For now, it can only handle labels in the form of (AND) OR (AND) OR (AND) ...
+ * TODO: Handle more complex queries.
+ */
+
+std::vector<label_set> query_filters_parser(std::string query_labels)
+{
+    char AND = '&';
+    char OR = '|';
+    std::vector<label_set> parsed_query_labels;
+
+    std::stringstream query_labels_stream(query_labels);
+    std::string or_query;
+    while (std::getline(query_labels_stream, or_query, AND))
+    {
+        std::stringstream or_query_stream(or_query);
+        std::string label;
+        label_set curr_labels;
+        while (std::getline(or_query_stream, label, OR))
+        {
+            curr_labels.insert(label);
+        }
+        parsed_query_labels.push_back(curr_labels);
+    }
+
+    return parsed_query_labels;
+}
+
+/*
+ * Parses a query labels file with complex filers.
+ */
+std::vector<std::vector<label_set>> parse_query_label_file(path filename)
+{
+    std::vector<std::vector<label_set>> result;
+    if (filename != "")
+    {
+        std::ifstream file(filename);
+        if (file.fail())
+        {
+            throw diskann::ANNException(std::string("Failed to open file ") + filename, -1);
+        }
+        std::string line;
+        while (std::getline(file, line))
+        {
+            if (line.empty())
+                throw diskann::ANNException("Malformed line in labels file (empty line)", -1);
+            if (line.back() == '\r' || line.back() == '\n')
+                line.erase(line.size() - 1);
+            result.push_back(query_filters_parser(line));
+        }
+        file.close();
+    }
+    else
+    {
+        throw diskann::ANNException(std::string("Failed to open file. filename can not be blank"), -1);
+    }
+
+    std::cout << "Parsed query label file. Has " << result.size() << " labelsets." << std::endl;
+    return result;
+}
+
+bool or_check(label_set query_labels, label_set base_labels)
+{
+    for (auto e : query_labels)
+    {
+        if (base_labels.count(e) > 0)
+            return true;
+    }
+    return false;
+}
+
+bool check_query_subset(std::vector<label_set> query_labels, label_set base_labels, std::string universal_label)
+{
+    if (base_labels.size() == 1 && base_labels.find(universal_label) != base_labels.end())
+    {
+        return true;
+    }
+
+    for (size_t i = 0; i < query_labels.size(); i++)
+    {
+        if (!or_check(query_labels[i], base_labels))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::vector<std::vector<uint32_t>> compute_base_points_per_query(
+    std::vector<std::vector<label_set>> query_pts_to_labels, std::vector<label_set> base_pts_to_labels,
+    std::string universal_label)
+{
+    auto compute_timer = std::chrono::high_resolution_clock::now();
+    size_t num_queries = query_pts_to_labels.size(), num_base_pts = base_pts_to_labels.size();
+    std::vector<std::vector<uint32_t>> queries_to_base_pts(num_queries);
+    std::cout << "Computing base points per query... ";
+#pragma omp parallel for collapse(2)
+    for (size_t curr_query = 0; curr_query < num_queries; curr_query++)
+    {
+        for (size_t curr_base_pt = 0; curr_base_pt < num_base_pts; curr_base_pt++)
+        {
+            std::vector<label_set> curr_query_labels = query_pts_to_labels[curr_query];
+            label_set curr_base_labels = base_pts_to_labels[curr_base_pt];
+            if (check_query_subset(curr_query_labels, curr_base_labels, universal_label))
+            {
+                queries_to_base_pts[curr_query].push_back(curr_base_pt);
+            }
+        }
+    }
+
+    std::chrono::duration<double> compute_time = std::chrono::high_resolution_clock::now() - compute_timer;
+    std::cout << "done in " << compute_time.count() << "seconds." << std::endl;
+
+    return queries_to_base_pts;
+} // namespace diskann
+
 /*
  * Using passed in parameters and files generated from step 3,
  * builds a vanilla diskANN index for each label.
@@ -238,12 +358,14 @@ parse_label_file_return_values parse_label_file(path label_data_path, std::strin
             std::cerr << "Error: " << point_id << " has no labels." << std::endl;
             exit(-1);
         }
+        // std::sort(current_labels.begin(), current_labels.end());
         point_ids_to_labels[point_id] = current_labels;
         line_cnt++;
     }
 
     // for every point with universal label, set its label set to all labels
     // also, increment the count for number of points a label has
+    // std::sort(all_labels.begin(), all_labels.end());
     for (const auto &point_id : points_with_universal_label)
     {
         point_ids_to_labels[point_id] = all_labels;
@@ -280,5 +402,4 @@ template DISKANN_DLLEXPORT tsl::robin_map<std::string, std::vector<uint32_t>>
 generate_label_specific_vector_files_compat<int8_t>(path input_data_path,
                                                     tsl::robin_map<std::string, uint32_t> labels_to_number_of_points,
                                                     std::vector<label_set> point_ids_to_labels, label_set all_labels);
-
 } // namespace diskann

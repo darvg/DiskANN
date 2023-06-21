@@ -1092,7 +1092,7 @@ inline std::vector<std::string> read_file_to_vector_of_strings(const std::string
     return result;
 }
 
-inline void clean_up_artifacts(tsl::robin_set<std::string> paths_to_clean, tsl::robin_set<std::string> path_suffixes)
+inline void clean_up_artifacts(tsl::robin_set<std::string> paths_to_clean, std::set<std::string> path_suffixes)
 {
     try
     {
