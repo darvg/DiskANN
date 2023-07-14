@@ -16,8 +16,8 @@
 
 # Some variables like MSVC are defined only after project(), so put that first.
 
-set(CMAKE_CXX_COMPILER "/opt/homebrew/Cellar/llvm/15.0.7_1/bin/clang++")
-set(CMAKE_C_COMPILER "/opt/homebrew/Cellar/llvm/15.0.7_1/bin/clang")
+set(CMAKE_CXX_COMPILER "/opt/homebrew/Cellar/llvm/16.0.1/bin/clang++")
+set(CMAKE_C_COMPILER "/opt/homebrew/Cellar/llvm/16.0.1/bin/clang")
 # set(CMAKE_CXX_COMPILER "g++")
 # set(CMAKE_C_COMPILER "gcc")
 project(diskann)
