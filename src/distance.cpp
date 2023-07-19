@@ -166,13 +166,24 @@ float DistanceL2Int8::compare(const int8_t *a, const int8_t *b, uint32_t size) c
 
 float DistanceL2UInt8::compare(const uint8_t *a, const uint8_t *b, uint32_t size) const
 {
-    uint32_t result = 0;
+    float result = 0.0;
+/*     float norma = 0.0; */
+/*     float normb = 0.0; */
+/* #pragma omp simd reduction(+ : norma, normb) aligned(a, b : 8) */
+/*     for (int32_t i = 0; i < (int32_t)size; i++) */
+/*     { */
+/*         norma += (float)(a[i] * a[i]); */
+/*         normb += (float)(b[i] * b[i]); */
+/*     } */
+/*     normb = std::sqrt(normb); */
+/*     norma = std::sqrt(norma); */
 #ifndef _WINDOWS
 #pragma omp simd reduction(+ : result) aligned(a, b : 8)
 #endif
     for (int32_t i = 0; i < (int32_t)size; i++)
     {
         result += ((int32_t)((int16_t)a[i] - (int16_t)b[i])) * ((int32_t)((int16_t)a[i] - (int16_t)b[i]));
+        // result += (float)(a[i] / norma - b[i] / normb) * (float)(a[i] / norma - b[i] / normb);
     }
     return (float)result;
 }
@@ -227,6 +238,7 @@ float DistanceL2Float::compare(const float *a, const float *b, uint32_t size) co
 template <typename T> float SlowDistanceL2<T>::compare(const T *a, const T *b, uint32_t length) const
 {
     float result = 0.0f;
+    std::cout << "test" << std::endl;
     for (uint32_t i = 0; i < length; i++)
     {
         result += ((float)(a[i] - b[i])) * (a[i] - b[i]);

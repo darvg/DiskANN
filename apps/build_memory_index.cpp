@@ -26,13 +26,15 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t>
 int build_in_memory_index(const diskann::Metric &metric, const std::string &data_path, const uint32_t R,
                           const uint32_t L, const float alpha, const std::string &save_path, const uint32_t num_threads,
                           const bool use_pq_build, const size_t num_pq_bytes, const bool use_opq,
-                          const std::string &label_file, const std::string &universal_label, const uint32_t Lf)
+                          const std::string &label_file, const std::string &universal_label, const uint32_t Lf,
+                          const float filter_penalty_hp)
 {
     diskann::IndexWriteParameters paras = diskann::IndexWriteParametersBuilder(L, R)
                                               .with_filter_list_size(Lf)
                                               .with_alpha(alpha)
                                               .with_saturate_graph(false)
                                               .with_num_threads(num_threads)
+                                              .with_filter_penalty_hp(filter_penalty_hp)
                                               .build();
     std::string labels_file_to_use = save_path + "_label_formatted.txt";
     std::string mem_labels_int_map_file = save_path + "_labels_map.txt";
@@ -70,7 +72,7 @@ int main(int argc, char **argv)
 {
     std::string data_type, dist_fn, data_path, index_path_prefix, label_file, universal_label, label_type;
     uint32_t num_threads, R, L, Lf, build_PQ_bytes;
-    float alpha;
+    float alpha, filter_penalty_hp;
     bool use_pq_build, use_opq;
 
     po::options_description desc{
@@ -114,6 +116,8 @@ int main(int argc, char **argv)
                                        program_options_utils::FILTERED_LBUILD);
         optional_configs.add_options()("label_type", po::value<std::string>(&label_type)->default_value("uint"),
                                        program_options_utils::LABEL_TYPE_DESCRIPTION);
+        optional_configs.add_options()("filter_penalty_hp", po::value<float>(&filter_penalty_hp)->default_value(0.0),
+                                       "penalty to add to distance for mismatching labels");
 
         // Merge required and optional parameters
         desc.add(required_configs).add(optional_configs);
@@ -180,6 +184,7 @@ int main(int argc, char **argv)
 
         auto index_build_params = diskann::IndexWriteParametersBuilder(L, R)
                                       .with_filter_list_size(Lf)
+                                      .with_filter_penalty_hp(filter_penalty_hp)
                                       .with_alpha(alpha)
                                       .with_saturate_graph(false)
                                       .with_num_threads(num_threads)

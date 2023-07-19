@@ -2,6 +2,7 @@
 #include "distance.h"
 #include "parameters.h"
 #include "utils.h"
+#include "filter_utils.h"
 #include "types.h"
 #include "index_config.h"
 #include "index_build_params.h"
@@ -75,9 +76,9 @@ class AbstractIndex
     // Filter support search
     // IndexType is either uint32_t or uint64_t
     template <typename IndexType>
-    std::pair<uint32_t, uint32_t> search_with_filters(const DataType &query, const std::string &raw_label,
-                                                      const size_t K, const uint32_t L, IndexType *indices,
-                                                      float *distances);
+    std::pair<uint32_t, uint32_t> search_with_filters(const DataType &query, const std::vector<label_set> &raw_label,
+                                                      const size_t K, const uint32_t L, const float filter_penalty_hp,
+                                                      IndexType *indices, float *distances);
 
     template <typename data_type, typename tag_type> int insert_point(const data_type *point, const tag_type tag);
 
@@ -102,8 +103,10 @@ class AbstractIndex
                         TagVector &tags) = 0;
     virtual std::pair<uint32_t, uint32_t> _search(const DataType &query, const size_t K, const uint32_t L,
                                                   std::any &indices, float *distances = nullptr) = 0;
-    virtual std::pair<uint32_t, uint32_t> _search_with_filters(const DataType &query, const std::string &filter_label,
-                                                               const size_t K, const uint32_t L, std::any &indices,
+    virtual std::pair<uint32_t, uint32_t> _search_with_filters(const DataType &query,
+                                                               const std::vector<label_set> &filter_label,
+                                                               const size_t K, const uint32_t L,
+                                                               const float filter_penalty_hp, std::any &indices,
                                                                float *distances) = 0;
     virtual int _insert_point(const DataType &data_point, const TagType tag) = 0;
     virtual int _lazy_delete(const TagType &tag) = 0;

@@ -9,6 +9,7 @@ namespace diskann
 namespace defaults
 {
 const float ALPHA = 1.2f;
+const float FILTER_PENALTY_HP = 0.001f;
 const uint32_t NUM_THREADS = 0;
 const uint32_t MAX_OCCLUSION_SIZE = 750;
 const uint32_t FILTER_LIST_SIZE = 0;

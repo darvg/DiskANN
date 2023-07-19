@@ -34,12 +34,14 @@ size_t AbstractIndex::search_with_tags(const data_type *query, const uint64_t K,
 }
 
 template <typename IndexType>
-std::pair<uint32_t, uint32_t> AbstractIndex::search_with_filters(const DataType &query, const std::string &raw_label,
-                                                                 const size_t K, const uint32_t L, IndexType *indices,
+std::pair<uint32_t, uint32_t> AbstractIndex::search_with_filters(const DataType &query,
+                                                                 const std::vector<label_set> &raw_label,
+                                                                 const size_t K, const uint32_t L,
+                                                                 const float filter_penalty_hp, IndexType *indices,
                                                                  float *distances)
 {
     auto any_indices = std::any(indices);
-    return _search_with_filters(query, raw_label, K, L, any_indices, distances);
+    return _search_with_filters(query, raw_label, K, L, filter_penalty_hp, any_indices, distances);
 }
 
 template <typename data_type>
@@ -153,12 +155,12 @@ template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> AbstractIndex::search<i
     const int8_t *query, const size_t K, const uint32_t L, uint64_t *indices, float *distances);
 
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> AbstractIndex::search_with_filters<uint32_t>(
-    const DataType &query, const std::string &raw_label, const size_t K, const uint32_t L, uint32_t *indices,
-    float *distances);
+    const DataType &query, const std::vector<label_set> &raw_label, const size_t K, const uint32_t L,
+    const float filter_penalty_hp, uint32_t *indices, float *distances);
 
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> AbstractIndex::search_with_filters<uint64_t>(
-    const DataType &query, const std::string &raw_label, const size_t K, const uint32_t L, uint64_t *indices,
-    float *distances);
+    const DataType &query, const std::vector<label_set> &raw_label, const size_t K, const uint32_t L,
+    const float filter_penalty_hp, uint64_t *indices, float *distances);
 
 template DISKANN_DLLEXPORT size_t AbstractIndex::search_with_tags<float, int32_t>(const float *query, const uint64_t K,
                                                                                   const uint32_t L, int32_t *tags,
