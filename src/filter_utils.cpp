@@ -97,19 +97,14 @@ bool check_query_subset(std::vector<label_set> query_labels, label_set base_labe
         return true;
     }
 
-    if (query_labels.size() > base_labels.size())
-    {
-        return false;
-    }
-
     for (size_t i = 0; i < query_labels.size(); i++)
     {
-        if (or_check(query_labels[i], base_labels))
+        if (!or_check(query_labels[i], base_labels))
         {
-            return true;
+            return false;
         }
     }
-    return false;
+    return true;
 }
 
 compute_base_points_per_query_return_values compute_base_points_per_query(
