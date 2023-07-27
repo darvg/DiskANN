@@ -274,7 +274,7 @@ int aux_main(const path &base_file, const path &gt_file, const path &query_file,
     std::vector<std::vector<std::pair<uint32_t, float>>> results_per_query(num_queries);
     for (size_t query_id = 0; query_id < num_queries; query_id++)
     {
-        float *curr_query_vector = &query_data[query_id];
+        float *curr_query_vector = query_data + (dimension * query_id);
         path curr_query_base_file = base_file + "_" + std::to_string(query_id);
         results_per_query[query_id] = process_query<T>(curr_query_base_file, k, curr_query_vector);
         std::filesystem::remove(curr_query_base_file);
