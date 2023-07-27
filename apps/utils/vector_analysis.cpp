@@ -49,6 +49,7 @@ template <typename T> int normalize_base(std::string base_file, std::string out_
     T *data;
     size_t npts, ndims;
     diskann::load_bin<T>(base_file, data, npts, ndims);
+    float *new_data = (float *)malloc(sizeof(float) * npts * ndims);
     //  std::vector<float> norms(npts, 0);
 #pragma omp parallel for schedule(dynamic)
     for (int64_t i = 0; i < (int64_t)npts; i++)
@@ -58,9 +59,14 @@ template <typename T> int normalize_base(std::string base_file, std::string out_
             pt_norm += data[i * ndims + d] * data[i * ndims + d];
         pt_norm = std::sqrt(pt_norm);
         for (size_t d = 0; d < ndims; d++)
-            data[i * ndims + d] = static_cast<T>(data[i * ndims + d] / pt_norm);
+        {
+            float normed_coord = (float)data[i * ndims + d] / pt_norm;
+            float *curr_ind = new_data + (i * ndims + d);
+            std::memcpy(curr_ind, &normed_coord, sizeof(float));
+        }
     }
-    diskann::save_bin<T>(out_file, data, npts, ndims);
+    diskann::save_bin<float>(out_file, new_data, npts, ndims);
+    free(new_data);
     delete[] data;
     return 0;
 }
