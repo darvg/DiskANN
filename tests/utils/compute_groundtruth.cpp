@@ -14,6 +14,7 @@
 #include <limits>
 #include <cstring>
 #include <queue>
+#include <malloc/_malloc.h>
 #include <omp.h>
 #include <boost/program_options.hpp>
 #include <unordered_map>
@@ -59,6 +60,14 @@ template<class T>
 T *aligned_malloc(const size_t n, const size_t alignment) {
 #ifdef _WINDOWS
   return (T *) _aligned_malloc(sizeof(T) * n, alignment);
+#elif __APPLE__
+  void *ptr;
+  int   err = posix_memalign(&ptr, alignment, sizeof(T) * n);
+  if (err) {
+    std::cout << err << std::endl;
+    throw;
+  }
+  return (T *) ptr;
 #else
   return static_cast<T *>(aligned_alloc(alignment, sizeof(T) * n));
 #endif
@@ -295,6 +304,7 @@ inline void load_bin_as_float(const char *filename, float *&data,
   std::cout << "Finished reading part of the bin file." << std::endl;
   reader.close();
   data = aligned_malloc<float>(npts_u64 * ndims_u64, ALIGNMENT);
+  memcpy(data, data_T, sizeof(float));
 #pragma omp parallel for schedule(dynamic, 32768)
   for (int64_t i = 0; i < (int64_t) npts_u64; i++) {
     for (int64_t j = 0; j < (int64_t) ndims_u64; j++) {
