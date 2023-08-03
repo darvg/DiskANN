@@ -50,13 +50,15 @@ void AppleAlignedFileReader::register_thread() {
   }
 
   IOContext ctx;
-  ctx.queue = dispatch_queue_create("reader", DISPATCH_QUEUE_SERIAL);
+  auto      x = *static_cast<unsigned int*>(static_cast<void*>(&current_id));
+  ctx.queue =
+      dispatch_queue_create(std::to_string(x).c_str(), DISPATCH_QUEUE_SERIAL);
   ctx.grp = dispatch_group_create();
-  ctx.channel = dispatch_io_create(DISPATCH_IO_RANDOM, this->file_desc,
-                                   ctx.queue, ^(int error) {
-                                     dispatch_release(ctx.channel);
-                                     throw;
-                                   });
+  ctx.channel =  // the cleanup is handled by deregister_all_threads for
+                 // readability reasons
+      dispatch_io_create(DISPATCH_IO_RANDOM, this->file_desc, ctx.queue,
+                         ^(int error){
+                         });
   if (ctx.channel == NULL)
     throw;
   this->ctx_map.insert(std::make_pair(std::this_thread::get_id(), ctx));
@@ -125,10 +127,10 @@ void AppleAlignedFileReader::read(std::vector<AlignedRead>& read_reqs,
 
     // fill OVERLAPPED and issue them
     for (_u64 j = 0; j < batch_size; j++) {
-      AlignedRead&  req = read_reqs[batch_start + j];
-      _u64          offset = req.offset;
-      __block _u64  nbytes = req.len;
-      __block char* read_buf = (char*) req.buf;
+      AlignedRead& req = read_reqs[batch_start + j];
+      _u64         offset = req.offset;
+      _u64         nbytes = req.len;
+      char*        read_buf = (char*) req.buf;
       assert(IS_ALIGNED(read_buf, SECTOR_LEN));
       assert(IS_ALIGNED(offset, SECTOR_LEN));
       assert(IS_ALIGNED(nbytes, SECTOR_LEN));
