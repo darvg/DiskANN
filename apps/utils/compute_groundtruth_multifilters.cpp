@@ -341,7 +341,7 @@ int aux_main(const path &base_file, const path &gt_file, const path &query_file,
     std::cout << std::setprecision(2);
 
     std::vector<std::vector<std::pair<uint32_t, float>>> results_per_query(num_queries);
-    for (size_t query_id = 0; query_id < 10; query_id++)
+    for (size_t query_id = 0; query_id < num_queries; query_id++)
     {
         float *curr_query_vector = query_data + (dimension * query_id);
         char *curr_query_base_data =
@@ -355,13 +355,12 @@ int aux_main(const path &base_file, const path &gt_file, const path &query_file,
 
     uint32_t *closest_points = new uint32_t[num_queries * k];
     float *closest_distances = new float[num_queries * k];
-    for (size_t query_id = 0; query_id < 10; query_id++)
+    for (size_t query_id = 0; query_id < num_queries; query_id++)
     {
         std::vector<std::pair<uint32_t, float>> &curr_query_results = results_per_query[query_id];
         std::sort(curr_query_results.begin(), curr_query_results.end(), custom_dist);
 
         size_t i = 0;
-        std::cout << "query " << query_id << " has " << query_to_base_pts[query_id].size() << "points" << std::endl;
         for (auto result : curr_query_results)
         {
             if (i == k)
@@ -370,7 +369,6 @@ int aux_main(const path &base_file, const path &gt_file, const path &query_file,
             uint32_t new_id = result.first;
             uint32_t true_id = query_to_base_pts[query_id][new_id];
             float distance = result.second;
-            std::cout << new_id << " " << distance << " " << true_id << std::endl;
             uint32_t curr_index = query_id * k + i;
             closest_points[curr_index] = true_id;
             closest_distances[curr_index] = distance;
