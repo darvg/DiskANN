@@ -377,7 +377,7 @@ int aux_main(const path &base_file, const path &gt_file, const path &query_file,
         }
     }
 
-    save_groundtruth_as_one_file(gt_file, closest_points, closest_distances, 10, k);
+    save_groundtruth_as_one_file(gt_file, closest_points, closest_distances, num_queries, k);
     delete[] closest_points;
     delete[] closest_distances;
     unmap_bin(base_data, fsize);
