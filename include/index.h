@@ -147,7 +147,7 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     template <typename IndexType>
     DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> search_with_filters(
         const T *query, const std::vector<std::vector<LabelT>> &filter_label, const size_t K, const uint32_t L,
-        const float filter_penalty_hp, IndexType *indices, float *distances);
+        const float filter_penalty_hp, const float penalty_threshold, IndexType *indices, float *distances);
 
     // Will fail if tag already in the index or if tag=0.
     DISKANN_DLLEXPORT int insert_point(const T *point, const TagT tag);
@@ -208,11 +208,9 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
 
     virtual std::pair<uint32_t, uint32_t> _search(const DataType &query, const size_t K, const uint32_t L,
                                                   std::any &indices, float *distances = nullptr) override;
-    virtual std::pair<uint32_t, uint32_t> _search_with_filters(const DataType &query,
-                                                               const std::vector<label_set> &filter_label_raw,
-                                                               const size_t K, const uint32_t L,
-                                                               const float filter_penalty_hp, std::any &indices,
-                                                               float *distances) override;
+    virtual std::pair<uint32_t, uint32_t> _search_with_filters(
+        const DataType &query, const std::vector<label_set> &filter_label_raw, const size_t K, const uint32_t L,
+        const float filter_penalty_hp, const float penalty_threshold, std::any &indices, float *distances) override;
 
     virtual int _insert_point(const DataType &data_point, const TagType tag) override;
 
@@ -386,6 +384,7 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     bool _use_universal_label = false;
     LabelT _universal_label = 0;
     float _filter_penalty_hp;
+    float _tau;
     uint32_t _filterIndexingQueueSize;
     std::unordered_map<std::string, LabelT> _label_map;
 

@@ -78,7 +78,8 @@ class AbstractIndex
     template <typename IndexType>
     std::pair<uint32_t, uint32_t> search_with_filters(const DataType &query, const std::vector<label_set> &raw_label,
                                                       const size_t K, const uint32_t L, const float filter_penalty_hp,
-                                                      IndexType *indices, float *distances);
+                                                      const float penalty_threshold, IndexType *indices,
+                                                      float *distances);
 
     template <typename data_type, typename tag_type> int insert_point(const data_type *point, const tag_type tag);
 
@@ -103,11 +104,9 @@ class AbstractIndex
                         TagVector &tags) = 0;
     virtual std::pair<uint32_t, uint32_t> _search(const DataType &query, const size_t K, const uint32_t L,
                                                   std::any &indices, float *distances = nullptr) = 0;
-    virtual std::pair<uint32_t, uint32_t> _search_with_filters(const DataType &query,
-                                                               const std::vector<label_set> &filter_label,
-                                                               const size_t K, const uint32_t L,
-                                                               const float filter_penalty_hp, std::any &indices,
-                                                               float *distances) = 0;
+    virtual std::pair<uint32_t, uint32_t> _search_with_filters(
+        const DataType &query, const std::vector<label_set> &filter_label, const size_t K, const uint32_t L,
+        const float filter_penalty_hp, const float penalty_threshold, std::any &indices, float *distances) = 0;
     virtual int _insert_point(const DataType &data_point, const TagType tag) = 0;
     virtual int _lazy_delete(const TagType &tag) = 0;
     virtual void _lazy_delete(TagVector &tags, TagVector &failed_tags) = 0;
