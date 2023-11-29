@@ -1123,6 +1123,9 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
 
                 if (is_not_visited(id))
                 {
+                    float penalty = compare_filter_sets(_pts_to_labels[id], filter_label);
+                    if (penalty > _tau)
+                        continue;
                     id_scratch.push_back(id);
                 }
             }
@@ -1145,7 +1148,6 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
         }
 
         // Compute distances to unvisited nodes in the expansion
-        uint32_t cmp_skips = 0;
         if (_pq_dist)
         {
             assert(dist_scratch.capacity() >= id_scratch.size());
@@ -1166,20 +1168,12 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
 
                 float penalty = 0;
                 if (use_filter)
-                {
                     penalty += compare_filter_sets(_pts_to_labels[id], filter_label);
-                    if (search_invocation && penalty > _tau)
-                    {
-                        cmp_skips += 1;
-                        continue;
-                    }
-                }
                 float distance = _data_store->get_distance(aligned_query, id) + penalty;
                 dist_scratch.push_back(distance);
             }
         }
         cmps += (uint32_t)id_scratch.size();
-        cmps -= cmp_skips;
 
         // Insert <id, dist> pairs into the pool of candidates
         for (size_t m = 0; m < id_scratch.size(); ++m)
