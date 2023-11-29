@@ -324,7 +324,7 @@ int main(int argc, char **argv)
                                        program_options_utils::FAIL_IF_RECALL_BELOW);
         optional_configs.add_options()("filter_penalty_hp", po::value<float>(&filter_penalty_hp)->default_value(0.0),
                                        "penalty to add to distance for mismatching labels");
-        optional_configs.add_options()("filter_penalty_hp", po::value<float>(&penalty_threshold)->default_value(-1.0),
+        optional_configs.add_options()("penalty_threshold", po::value<float>(&penalty_threshold)->default_value(-1.0),
                                        "skip comparisons for bad penalties");
 
         // Output controls
