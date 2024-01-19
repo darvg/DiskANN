@@ -927,6 +927,15 @@ bool Index<T, TagT, LabelT>::detect_common_filters(uint32_t point_id, bool searc
 }
 
 template <typename T, typename TagT, typename LabelT>
+std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::brute_force_filters(
+    const T *query, const uint32_t Lsize, const std::vector<uint32_t> &init_ids, InMemQueryScratch<T> *scratch,
+    const std::vector<std::vector<LabelT>> &filter_label)
+{
+
+    return std::pair<0, 0>
+}
+
+template <typename T, typename TagT, typename LabelT>
 float Index<T, TagT, LabelT>::compare_filter_sets(const std::vector<LabelT> base_labels,
                                                   const std::vector<std::vector<LabelT>> query_labels)
 {
@@ -2051,6 +2060,7 @@ void Index<T, TagT, LabelT>::parse_label_file(const std::string &label_file, siz
             LabelT token_as_num = (LabelT)std::stoul(token);
             lbls.push_back(token_as_num);
             _labels.insert(token_as_num);
+            _labels_to_pts[token_as_num].insert(line_cnt);
         }
         if (lbls.size() <= 0)
         {
@@ -2241,7 +2251,8 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search(const T *query, con
 template <typename T, typename TagT, typename LabelT>
 std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::_search_with_filters(
     const DataType &query, const std::vector<label_set> &raw_label, const size_t K, const uint32_t L,
-    const float filter_penalty_hp, const float penalty_threshold, std::any &indices, float *distances)
+    const float filter_penalty_hp, const float penalty_threshold, const uint32_t bf_threshold, std::any &indices,
+    float *distances)
 {
     std::vector<std::vector<LabelT>> curr_converted_query_filters;
     for (size_t i = 0; i < raw_label.size(); i++)
@@ -2261,13 +2272,13 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::_search_with_filters(
     {
         auto ptr = std::any_cast<uint64_t *>(indices);
         return this->search_with_filters(std::any_cast<T *>(query), curr_converted_query_filters, K, L,
-                                         filter_penalty_hp, penalty_threshold, ptr, distances);
+                                         filter_penalty_hp, penalty_threshold, bf_threshold, ptr, distances);
     }
     else if (typeid(uint32_t *) == indices.type())
     {
         auto ptr = std::any_cast<uint32_t *>(indices);
         return this->search_with_filters(std::any_cast<T *>(query), curr_converted_query_filters, K, L,
-                                         filter_penalty_hp, penalty_threshold, ptr, distances);
+                                         filter_penalty_hp, penalty_threshold, bf_threshold, ptr, distances);
     }
     else
     {
@@ -2275,11 +2286,32 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::_search_with_filters(
     }
 }
 
+// assumes for now all ANDs. Will fail if there's an actual or clause
+template <typename T, typename TagT, typename LabelT>
+std::vector<std::pair<LabelT, uint32_t>> Index<T, TagT, LabelT>::sort_filter_counts(
+    const std::vector<std::vector<LabelT>> &filter_label)
+{
+    std::vector<std::pair<LabelT, uint32_t>> label_counts(filter_label.size());
+    for (auto const &or_clause : filter_label)
+    {
+        for (auto const &label : or_clause)
+        {
+            std::pair<LabelT, uint32_t> curr_pair(label, _labels_to_pts[label].size());
+            label_counts.append(curr_pair);
+        }
+    }
+    std::sort(label_counts.begin(), label_counts.end(),
+              [](auto &left, auto &right) { return left.second < right.second; });
+
+    return label_counts;
+}
+
 template <typename T, typename TagT, typename LabelT>
 template <typename IdType>
 std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search_with_filters(
     const T *query, const std::vector<std::vector<LabelT>> &filter_label, const size_t K, const uint32_t L,
-    const float filters_penalty_hp, const float penalty_threshold, IdType *indices, float *distances)
+    const float filters_penalty_hp, const float penalty_threshold, const uint32_t bf_threshold, IdType *indices,
+    float *distances)
 {
     if (K > (uint64_t)L)
     {
@@ -2304,6 +2336,8 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search_with_filters(
 
     std::shared_lock<std::shared_timed_mutex> lock(_update_lock);
 
+    std::vector<std::pair<LabelT, uint32_t>> sorted_filters = sort_filter_counts(filter_label, bf_threshold);
+
     // We need to improve the medoid choice
     if (_label_to_medoid_id.find(filter_label[0][0]) != _label_to_medoid_id.end())
     {
@@ -2321,8 +2355,27 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search_with_filters(
     // T *aligned_query = scratch->aligned_query();
     // memcpy(aligned_query, query, _dim * sizeof(T));
 
+    // only works for ands
     _distance->preprocess_query(query, _data_store->get_dims(), scratch->aligned_query());
-    auto retval = iterate_to_fixed_point(scratch->aligned_query(), L, init_ids, scratch, true, filter_label, true);
+    if (sorted_filters[0].second < bf_threshold)
+    {
+        // last_intersection has the common elements across all filters in sorted_filters
+        tsl::robin_set<uint32_t> last_intersection = _labels_to_pts[sorted_filters[0].first];
+        tsl::robin_set<uint32_t> curr_intersection;
+        for (size_t i = 1; i < sorted_filters.size(); i++)
+        {
+            tsl::robin_set<uint32_t> curr_label_pts = _labels_to_pts[sorted_filters[i].first];
+            std::set_intersection(last_intersection.begin(), last_intersection.end(), curr_label_pts.begin(), curr_label_pts.end(),
+                    std::inserter(curr_intersection, curr_intersection.begin());
+            std::swap(last_intersection, curr_intersection);
+            curr_intersection.clear();
+        }
+        auto retval = brute_force_filters(scratch->aligned_query(), L, init_ids, scratch, filter_label);
+    }
+    else
+    {
+        auto retval = iterate_to_fixed_point(scratch->aligned_query(), L, init_ids, scratch, true, filter_label, true);
+    }
 
     auto best_L_nodes = scratch->best_l_nodes();
 
@@ -3487,53 +3540,53 @@ template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t,
 
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<float, uint64_t, uint32_t>::search_with_filters<
     uint64_t>(const float *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<float, uint64_t, uint32_t>::search_with_filters<
     uint32_t>(const float *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<uint8_t, uint64_t, uint32_t>::search_with_filters<
     uint64_t>(const uint8_t *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<uint8_t, uint64_t, uint32_t>::search_with_filters<
     uint32_t>(const uint8_t *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint64_t, uint32_t>::search_with_filters<
     uint64_t>(const int8_t *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint64_t, uint32_t>::search_with_filters<
     uint32_t>(const int8_t *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 // TagT==uint32_t
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<float, uint32_t, uint32_t>::search_with_filters<
     uint64_t>(const float *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<float, uint32_t, uint32_t>::search_with_filters<
     uint32_t>(const float *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<uint8_t, uint32_t, uint32_t>::search_with_filters<
     uint64_t>(const uint8_t *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<uint8_t, uint32_t, uint32_t>::search_with_filters<
     uint32_t>(const uint8_t *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t, uint32_t>::search_with_filters<
     uint64_t>(const int8_t *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t, uint32_t>::search_with_filters<
     uint32_t>(const int8_t *query, const std::vector<std::vector<uint32_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<float, uint64_t, uint16_t>::search<uint64_t>(
     const float *query, const size_t K, const uint32_t L, uint64_t *indices, float *distances);
@@ -3563,51 +3616,51 @@ template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t,
 
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<float, uint64_t, uint16_t>::search_with_filters<
     uint64_t>(const float *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<float, uint64_t, uint16_t>::search_with_filters<
     uint32_t>(const float *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<uint8_t, uint64_t, uint16_t>::search_with_filters<
     uint64_t>(const uint8_t *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<uint8_t, uint64_t, uint16_t>::search_with_filters<
     uint32_t>(const uint8_t *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint64_t, uint16_t>::search_with_filters<
     uint64_t>(const int8_t *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint64_t, uint16_t>::search_with_filters<
     uint32_t>(const int8_t *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 // TagT==uint32_t
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<float, uint32_t, uint16_t>::search_with_filters<
     uint64_t>(const float *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<float, uint32_t, uint16_t>::search_with_filters<
     uint32_t>(const float *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<uint8_t, uint32_t, uint16_t>::search_with_filters<
     uint64_t>(const uint8_t *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<uint8_t, uint32_t, uint16_t>::search_with_filters<
     uint32_t>(const uint8_t *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t, uint16_t>::search_with_filters<
     uint64_t>(const int8_t *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint64_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint64_t *indices, float *distances);
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t, uint16_t>::search_with_filters<
     uint32_t>(const int8_t *query, const std::vector<std::vector<uint16_t>> &filter_label, const size_t K,
-              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold, uint32_t *indices,
-              float *distances);
+              const uint32_t L, const float filter_penalty_hp, const float penalty_threshold,
+              const uint32_t bf_threshold, uint32_t *indices, float *distances);
 } // namespace diskann

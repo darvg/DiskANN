@@ -168,7 +168,7 @@ int search_memory_index(diskann::Metric &metric, const std::string &index_path, 
             {
                 std::vector<label_set> curr_filters = query_filters[i];
                 auto retval = index->search_with_filters(query + i * query_aligned_dim, curr_filters, recall_at, L,
-                                                         filter_penalty_hp, penalty_threshold,
+                                                         filter_penalty_hp, penalty_threshold, 0,
                                                          query_result_ids[test_id].data() + i * recall_at,
                                                          query_result_dists[test_id].data() + i * recall_at);
                 cmp_stats[i] = retval.second;

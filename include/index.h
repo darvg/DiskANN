@@ -147,7 +147,8 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     template <typename IndexType>
     DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> search_with_filters(
         const T *query, const std::vector<std::vector<LabelT>> &filter_label, const size_t K, const uint32_t L,
-        const float filter_penalty_hp, const float penalty_threshold, IndexType *indices, float *distances);
+        const float filter_penalty_hp, const float penalty_threshold, const uint32_t bf_threshold, IndexType *indices,
+        float *distances);
 
     // Will fail if tag already in the index or if tag=0.
     DISKANN_DLLEXPORT int insert_point(const T *point, const TagT tag);
@@ -210,7 +211,8 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
                                                   std::any &indices, float *distances = nullptr) override;
     virtual std::pair<uint32_t, uint32_t> _search_with_filters(
         const DataType &query, const std::vector<label_set> &filter_label_raw, const size_t K, const uint32_t L,
-        const float filter_penalty_hp, const float penalty_threshold, std::any &indices, float *distances) override;
+        const float filter_penalty_hp, const float penalty_threshold, const uint32_t bf_threshold, std::any &indices,
+        float *distances) override;
 
     virtual int _insert_point(const DataType &data_point, const TagType tag) override;
 
@@ -245,6 +247,8 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     uint32_t calculate_entry_point();
 
     void parse_label_file(const std::string &label_file, size_t &num_pts_labels);
+
+    std::vector<std::pair<LabelT, uint32_t>> sort_filter_counts(const std::vector<std::vector<LabelT>> &filter_label);
 
     std::unordered_map<std::string, LabelT> load_label_map(const std::string &map_file);
 
@@ -377,6 +381,7 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
 
     bool _filtered_index = false;
     std::vector<std::vector<LabelT>> _pts_to_labels;
+    std::unordered_map<LabelT, tsl::robin_set<uint32_t>> _labels_to_pts;
     tsl::robin_set<LabelT> _labels;
     std::string _labels_file;
     std::unordered_map<LabelT, uint32_t> _label_to_medoid_id;
