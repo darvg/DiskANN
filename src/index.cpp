@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
+#include <ostream>
 #include <type_traits>
 #include <omp.h>
 
@@ -927,12 +928,25 @@ bool Index<T, TagT, LabelT>::detect_common_filters(uint32_t point_id, bool searc
 }
 
 template <typename T, typename TagT, typename LabelT>
-std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::brute_force_filters(
-    const T *query, const uint32_t Lsize, const std::vector<uint32_t> &init_ids, InMemQueryScratch<T> *scratch,
-    const std::vector<std::vector<LabelT>> &filter_label)
+std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::brute_force_filters(const T *query, const uint32_t Lsize,
+                                                                          const std::vector<uint32_t> &init_ids,
+                                                                          InMemQueryScratch<T> *scratch)
 {
+    T *aligned_query = scratch->aligned_query();
+    NeighborPriorityQueue &best_L_nodes = scratch->best_l_nodes();
+    best_L_nodes.reserve(Lsize);
 
-    return std::pair<0, 0>
+    uint32_t cmps = 0;
+    uint32_t hops = 0;
+    for (auto const &id : init_ids)
+    {
+        float distance = _data_store->get_distance(aligned_query, id);
+        Neighbor nn = Neighbor(id, distance);
+        best_L_nodes.insert(nn);
+        cmps++;
+    }
+
+    return std::make_pair(hops, cmps);
 }
 
 template <typename T, typename TagT, typename LabelT>
@@ -2060,7 +2074,7 @@ void Index<T, TagT, LabelT>::parse_label_file(const std::string &label_file, siz
             LabelT token_as_num = (LabelT)std::stoul(token);
             lbls.push_back(token_as_num);
             _labels.insert(token_as_num);
-            _labels_to_pts[token_as_num].insert(line_cnt);
+            _labels_to_pts[token_as_num].push_back(line_cnt);
         }
         if (lbls.size() <= 0)
         {
@@ -2070,6 +2084,11 @@ void Index<T, TagT, LabelT>::parse_label_file(const std::string &label_file, siz
         std::sort(lbls.begin(), lbls.end());
         _pts_to_labels[line_cnt] = lbls;
         line_cnt++;
+    }
+
+    for (auto &[key, value] : _labels_to_pts)
+    {
+        std::sort(value.begin(), value.end());
     }
     num_points = (size_t)line_cnt;
     diskann::cout << "Identified " << _labels.size() << " distinct label(s)" << std::endl;
@@ -2291,13 +2310,13 @@ template <typename T, typename TagT, typename LabelT>
 std::vector<std::pair<LabelT, uint32_t>> Index<T, TagT, LabelT>::sort_filter_counts(
     const std::vector<std::vector<LabelT>> &filter_label)
 {
-    std::vector<std::pair<LabelT, uint32_t>> label_counts(filter_label.size());
+    std::vector<std::pair<LabelT, uint32_t>> label_counts;
     for (auto const &or_clause : filter_label)
     {
         for (auto const &label : or_clause)
         {
             std::pair<LabelT, uint32_t> curr_pair(label, _labels_to_pts[label].size());
-            label_counts.append(curr_pair);
+            label_counts.push_back(curr_pair);
         }
     }
     std::sort(label_counts.begin(), label_counts.end(),
@@ -2336,7 +2355,7 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search_with_filters(
 
     std::shared_lock<std::shared_timed_mutex> lock(_update_lock);
 
-    std::vector<std::pair<LabelT, uint32_t>> sorted_filters = sort_filter_counts(filter_label, bf_threshold);
+    std::vector<std::pair<LabelT, uint32_t>> sorted_filters = sort_filter_counts(filter_label);
 
     // We need to improve the medoid choice
     if (_label_to_medoid_id.find(filter_label[0][0]) != _label_to_medoid_id.end())
@@ -2357,24 +2376,25 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search_with_filters(
 
     // only works for ands
     _distance->preprocess_query(query, _data_store->get_dims(), scratch->aligned_query());
+    std::pair<uint32_t, uint32_t> retval;
     if (sorted_filters[0].second < bf_threshold)
     {
         // last_intersection has the common elements across all filters in sorted_filters
-        tsl::robin_set<uint32_t> last_intersection = _labels_to_pts[sorted_filters[0].first];
-        tsl::robin_set<uint32_t> curr_intersection;
+        std::vector<uint32_t> last_intersection = _labels_to_pts[sorted_filters[0].first];
+        std::vector<uint32_t> curr_intersection;
         for (size_t i = 1; i < sorted_filters.size(); i++)
         {
-            tsl::robin_set<uint32_t> curr_label_pts = _labels_to_pts[sorted_filters[i].first];
-            std::set_intersection(last_intersection.begin(), last_intersection.end(), curr_label_pts.begin(), curr_label_pts.end(),
-                    std::inserter(curr_intersection, curr_intersection.begin());
+            std::vector<uint32_t> curr_label_pts = _labels_to_pts[sorted_filters[i].first];
+            std::set_intersection(last_intersection.begin(), last_intersection.end(), curr_label_pts.begin(),
+                                  curr_label_pts.end(), std::back_inserter(curr_intersection));
             std::swap(last_intersection, curr_intersection);
             curr_intersection.clear();
         }
-        auto retval = brute_force_filters(scratch->aligned_query(), L, init_ids, scratch, filter_label);
+        retval = brute_force_filters(scratch->aligned_query(), L, last_intersection, scratch);
     }
     else
     {
-        auto retval = iterate_to_fixed_point(scratch->aligned_query(), L, init_ids, scratch, true, filter_label, true);
+        retval = iterate_to_fixed_point(scratch->aligned_query(), L, init_ids, scratch, true, filter_label, true);
     }
 
     auto best_L_nodes = scratch->best_l_nodes();
@@ -2406,6 +2426,17 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search_with_filters(
     {
         // diskann::cerr << "Found fewer than K elements for query" << std::endl;
     }
+
+    /* if (sorted_filters[0].second < bf_threshold) */
+    /* { */
+    /*     std::cout << "results: "; */
+    /*     for (size_t i = 0; i < best_L_nodes.size(); i++) */
+    /*     { */
+    /*         std::cout << best_L_nodes[i].id << " "; */
+    /*     } */
+    /*     std::cout << std::endl; */
+    /*     exit(-1); */
+    /* } */
 
     return retval;
 }

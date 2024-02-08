@@ -256,6 +256,10 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     // with iterate_to_fixed_point.
     std::vector<uint32_t> get_init_ids();
 
+    std::pair<uint32_t, uint32_t> brute_force_filters(const T *query, const uint32_t Lsize,
+                                                      const std::vector<uint32_t> &init_ids,
+                                                      InMemQueryScratch<T> *scratch);
+
     std::pair<uint32_t, uint32_t> iterate_to_fixed_point(const T *node_coords, const uint32_t Lindex,
                                                          const std::vector<uint32_t> &init_ids,
                                                          InMemQueryScratch<T> *scratch, bool use_filter,
@@ -381,7 +385,7 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
 
     bool _filtered_index = false;
     std::vector<std::vector<LabelT>> _pts_to_labels;
-    std::unordered_map<LabelT, tsl::robin_set<uint32_t>> _labels_to_pts;
+    std::unordered_map<LabelT, std::vector<uint32_t>> _labels_to_pts;
     tsl::robin_set<LabelT> _labels;
     std::string _labels_file;
     std::unordered_map<LabelT, uint32_t> _label_to_medoid_id;
