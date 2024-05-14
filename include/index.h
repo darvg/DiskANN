@@ -26,6 +26,8 @@
 #define EXPAND_IF_FULL 0
 #define DEFAULT_MAXC 750
 
+inline uint32_t curr_query = 0;
+
 namespace diskann
 {
 

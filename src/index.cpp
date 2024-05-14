@@ -990,6 +990,12 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
     //{
     //     normalize((float *)aligned_query, _dim);
     // }
+    if (curr_query == 1)
+    {
+        std::ofstream out("query_stats1.txt", std::ios_base::app);
+        out << "starting search\n" << std::endl;
+        out.close();
+    }
 
     T *aligned_query = scratch->aligned_query();
 
@@ -1094,7 +1100,20 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
                     if (search_invocation && penalty > _tau)
                         continue;
                 }
+                if (curr_query == 1)
+                {
+                    std::ofstream out("query_stats1.txt", std::ios_base::app);
+                    out << "starting id " << id << " has (filter labels - overlap) size " << penalty << " and filters ";
+                    for (auto const &filter : _pts_to_labels[id])
+
+                    {
+                        out << filter << " ";
+                    }
+                    out << std::endl;
+                    out.close();
+                }
                 distance = _data_store->get_distance(aligned_query, id) + penalty;
+                /* distance = _data_store->get_distance(aligned_query, id); */
             }
             Neighbor nn = Neighbor(id, distance);
             best_L_nodes.insert(nn);
@@ -1104,10 +1123,27 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
     uint32_t hops = 0;
     uint32_t cmps = 0;
 
+    if (curr_query == 1)
+    {
+        std::ofstream out("query_stats1.txt", std::ios_base::app);
+        out << std::endl;
+        out.close();
+    }
+
     while (best_L_nodes.has_unexpanded_node())
     {
         auto nbr = best_L_nodes.closest_unexpanded();
         auto n = nbr.id;
+
+        if (curr_query == 1)
+        {
+            std::ofstream out("query_stats1.txt", std::ios_base::app);
+            out << "looking at id " << n << " with filters ";
+            for (auto const &filter : _pts_to_labels[n])
+                out << filter << " ";
+            out << std::endl;
+            out.close();
+        }
 
         // Add node to expanded nodes to create pool for prune later
         if (!search_invocation)
@@ -1192,8 +1228,30 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
                 float penalty = 0;
                 if (use_filter)
                     penalty += compare_filter_sets(_pts_to_labels[id], filter_label);
+
+                if (curr_query == 1)
+                {
+                    std::ofstream out("query_stats1.txt", std::ios_base::app);
+                    out << m << "."
+                        << " has penalty " << penalty << " and filters ";
+                    for (auto const &filter : _pts_to_labels[id])
+
+                    {
+                        out << filter << " ";
+                    }
+                    out << std::endl;
+                    out.close();
+                }
                 float distance = _data_store->get_distance(aligned_query, id) + penalty;
+                /* float distance = _data_store->get_distance(aligned_query, id); */
                 dist_scratch.push_back(distance);
+            }
+
+            if (curr_query == 1)
+            {
+                std::ofstream out("query_stats1.txt", std::ios_base::app);
+                out << std::endl;
+                out.close();
             }
         }
         cmps += (uint32_t)id_scratch.size();
@@ -2368,6 +2426,26 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search_with_filters(
                       << std::endl; // RKNOTE: If universal label found start there
         throw diskann::ANNException("No filtered medoid found. exitting ", -1);
     }
+
+    if (curr_query == 1)
+    {
+        std::ofstream out("query_stats1.txt", std::ios_base::app);
+        for (auto const &filt : filter_label[0])
+
+        {
+            out << filt << "/" << _labels_to_pts[filt].size() << " ";
+        }
+        out << std::endl;
+
+        out << "setting up init ids with ids ";
+        for (auto const &id : init_ids)
+        {
+            out << id << " ";
+        }
+        out << std::endl;
+        out.close();
+    }
+
     /* filter_vec.emplace_back(filter_label); */
 
     // REFACTOR
@@ -2402,7 +2480,8 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search_with_filters(
     size_t pos = 0;
     for (size_t i = 0; i < best_L_nodes.size(); ++i)
     {
-        if (best_L_nodes[i].id < _max_points)
+        if (best_L_nodes[i].id < _max_points &&
+            (compare_filter_sets(_pts_to_labels[best_L_nodes[i].id], filter_label) == 0.))
         {
             // safe because Index uses uint32_t ids internally
             // and IDType will be uint32_t or uint64_t
@@ -2437,6 +2516,19 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::search_with_filters(
     /*     std::cout << std::endl; */
     /*     exit(-1); */
     /* } */
+
+    if (curr_query == 1)
+    {
+        std::ofstream out("query_stats1.txt", std::ios_base::app);
+        out << "final results for L size " << best_L_nodes.size() << ": ";
+        for (size_t i = 0; i < best_L_nodes.size(); ++i)
+
+        {
+            out << best_L_nodes[i].id << " ";
+        }
+        out << std::endl << std::endl;
+        out.close();
+    }
 
     return retval;
 }

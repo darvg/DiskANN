@@ -164,6 +164,15 @@ int search_memory_index(diskann::Metric &metric, const std::string &index_path, 
         for (int64_t i = 0; i < (int64_t)query_num; i++)
         {
             auto qs = std::chrono::high_resolution_clock::now();
+
+            curr_query = i;
+            if (curr_query == 1)
+            {
+                std::ofstream out("query_stats1.txt", std::ios_base::app);
+                out << "Search path for query " << i << " with filters/specificities ";
+                out.close();
+            }
+
             if (filtered_search)
             {
                 std::vector<label_set> curr_filters = query_filters[i];
